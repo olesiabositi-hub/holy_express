@@ -54,8 +54,8 @@ export function makeSnow(scene: THREE.Scene, count: number) {
 }
 
 /** Пар из трубы: клубы растут, сносятся назад и тают. */
-export function makeSteam(scene: THREE.Scene, origin: THREE.Vector3) {
-  const N = 90;
+export function makeSteam(scene: THREE.Scene, origin: THREE.Vector3, continuous = true, N = 90) {
+  let puff = 0; // секунды «гудка»: пар валит из свистка
   const pos = new Float32Array(N * 3);
   const size = new Float32Array(N);
   const alpha = new Float32Array(N);
@@ -84,13 +84,28 @@ export function makeSteam(scene: THREE.Scene, origin: THREE.Vector3) {
     vel[i].set(-2 - Math.random(), 3.2 + Math.random() * 1.5, (Math.random() - 0.5) * 0.8);
     life[i] = 0;
   };
-  for (let i = 0; i < N; i++) reset(i);
+  for (let i = 0; i < N; i++) {
+    reset(i);
+    if (!continuous) life[i] = 99;
+  }
   return {
+    puff(sec: number) {
+      puff = sec;
+    },
     update(dt: number, speed: number) {
+      puff = Math.max(0, puff - dt);
       for (let i = 0; i < N; i++) {
         life[i] += dt;
-        const L = 4.2;
-        if (life[i] > L) reset(i);
+        const L = continuous ? 4.2 : 2.2;
+        if (life[i] > L) {
+          if (continuous || (puff > 0 && Math.random() < 0.5)) {
+            reset(i);
+            if (!continuous) vel[i].set(-1 - Math.random(), 5 + Math.random() * 2, (Math.random() - 0.5) * 1.2);
+          } else {
+            alpha[i] = 0;
+            continue;
+          }
+        }
         const k = life[i] / L;
         vel[i].y *= 1 - dt * 0.6;
         vel[i].x -= dt * speed * 0.35;
@@ -332,6 +347,148 @@ export function makeFinaleTree(scene: THREE.Scene) {
       }
       fg.attributes.position.needsUpdate = true;
       fg.attributes.color.needsUpdate = true;
+    },
+  };
+}
+
+/** Стадо северных оленей: иногда выбегает из леса и бежит рядом с поездом, оставляя искры. */
+export function makeReindeer(scene: THREE.Scene) {
+  const fur = new THREE.MeshStandardMaterial({ color: "#8a5a3c", roughness: 0.85 });
+  const light = new THREE.MeshStandardMaterial({ color: "#efe6da", roughness: 0.9 });
+  const horn = new THREE.MeshStandardMaterial({ color: "#d9c39a", roughness: 0.6 });
+  const dark = new THREE.MeshStandardMaterial({ color: "#2a1d16", roughness: 0.8 });
+  type Deer = { g: THREE.Group; legs: THREE.Group[]; phase: number; off: THREE.Vector3 };
+  const mkDeer = (): Deer => {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 1.3, 4, 10).rotateZ(Math.PI / 2), fur);
+    body.position.y = 1.55;
+    g.add(body);
+    const belly = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 1.0, 4, 8).rotateZ(Math.PI / 2), light);
+    belly.position.set(0, 1.38, 0);
+    g.add(belly);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 0.9, 8), fur);
+    neck.position.set(0.85, 2.0, 0);
+    neck.rotation.z = -0.7;
+    g.add(neck);
+    const mane = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), light);
+    mane.scale.set(1, 1.3, 0.9);
+    mane.position.set(0.85, 1.85, 0);
+    g.add(mane);
+    const head = new THREE.Mesh(new THREE.CapsuleGeometry(0.17, 0.45, 4, 8).rotateZ(Math.PI / 2 + 0.3), fur);
+    head.position.set(1.3, 2.4, 0);
+    g.add(head);
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5), dark);
+    nose.position.set(1.6, 2.3, 0);
+    g.add(nose);
+    // ветвистые рога
+    for (const z of [-0.12, 0.12]) {
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.05, 0.9, 5), horn);
+      beam.position.set(1.15, 2.95, z * 2.2);
+      beam.rotation.set(z * 2, 0, 0.45);
+      g.add(beam);
+      for (let k = 0; k < 3; k++) {
+        const tine = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.35, 4), horn);
+        tine.position.set(1.05 + k * 0.08, 2.75 + k * 0.22, z * (2.6 + k * 0.6));
+        tine.rotation.set(z * 3, 0, -0.5);
+        g.add(tine);
+      }
+    }
+    const tail = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 5), light);
+    tail.position.set(-1.05, 1.75, 0);
+    g.add(tail);
+    const legs: THREE.Group[] = [];
+    for (const [x, z] of [[0.6, 0.22], [0.6, -0.22], [-0.6, 0.22], [-0.6, -0.22]]) {
+      const leg = new THREE.Group();
+      leg.position.set(x, 1.35, z);
+      const upper = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 1.2, 6).translate(0, -0.6, 0), fur);
+      leg.add(upper);
+      const hoof = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.12, 6), dark);
+      hoof.position.y = -1.22;
+      leg.add(hoof);
+      g.add(leg);
+      legs.push(leg);
+    }
+    return { g, legs, phase: Math.random() * 6.28, off: new THREE.Vector3() };
+  };
+  const herd = new THREE.Group();
+  herd.visible = false;
+  scene.add(herd);
+  const deer: Deer[] = [];
+  for (let i = 0; i < 6; i++) {
+    const d = mkDeer();
+    d.off.set((i % 3) * -4.2 - Math.floor(i / 3) * 2.1, 0, Math.floor(i / 3) * 3.2 + (i % 2) * 0.8);
+    d.g.scale.setScalar(i === 0 ? 1.45 : 1.1 + Math.random() * 0.25);
+    herd.add(d.g);
+    deer.push(d);
+  }
+  // золотая пыль из-под копыт
+  const N = 260;
+  const dp = new Float32Array(N * 3);
+  const dl = new Float32Array(N);
+  const dv = Array.from({ length: N }, () => new THREE.Vector3());
+  const dg = new THREE.BufferGeometry();
+  dg.setAttribute("position", new THREE.BufferAttribute(dp, 3));
+  const dust = new THREE.Points(dg, new THREE.PointsMaterial({ map: softDot(), size: 0.55, color: new THREE.Color(2.6, 2.1, 1.1), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  dust.frustumCulled = false;
+  scene.add(dust);
+  let di = 0;
+
+  // ?deer — стадо сразу (для проверки)
+  let next = new URLSearchParams(location.search).has("deer") ? 0.5 : 14 + Math.random() * 8;
+  let active = false;
+  let run = 0;
+  const tmp = new THREE.Vector3();
+  return {
+    update(dt: number, t: number, speed: number, allowed: boolean) {
+      // искры живут и без стада: догорают
+      for (let i = 0; i < N; i++) {
+        dl[i] -= dt;
+        if (dl[i] <= 0) {
+          dp[i * 3 + 1] = -50;
+          continue;
+        }
+        dv[i].y -= dt * 0.8;
+        dp[i * 3] += (dv[i].x - speed) * dt;
+        dp[i * 3 + 1] += dv[i].y * dt;
+        dp[i * 3 + 2] += dv[i].z * dt;
+      }
+      dg.attributes.position.needsUpdate = true;
+      if (!active) {
+        next -= dt;
+        if (next <= 0 && allowed) {
+          active = true;
+          run = 0;
+          const near = Math.random() < 0.75;
+          herd.position.set(60, 0, near ? 15 + Math.random() * 6 : -(22 + Math.random() * 12));
+          herd.rotation.y = 0;
+          herd.visible = true;
+        }
+        return;
+      }
+      run += dt;
+      // бегут почти вровень с поездом и понемногу отстают, в конце уходят в лес
+      const runSpeed = speed - 1.8;
+      herd.position.x += (runSpeed - speed) * dt;
+      if (run > 38) herd.position.z += Math.sign(herd.position.z) * dt * 6;
+      if (herd.position.x < -120 || Math.abs(herd.position.z) > 90) {
+        active = false;
+        herd.visible = false;
+        next = 35 + Math.random() * 30;
+        return;
+      }
+      deer.forEach((d, i) => {
+        const ph = t * 9 + d.phase;
+        d.g.position.set(d.off.x + Math.sin(t * 0.7 + i) * 0.8, Math.max(0, Math.sin(ph)) * 0.55, d.off.z + Math.sin(t * 0.5 + i * 2) * 0.5);
+        d.g.rotation.z = Math.cos(ph) * 0.08;
+        d.legs.forEach((l, k) => (l.rotation.z = Math.sin(ph + (k < 2 ? 0 : Math.PI)) * 0.75));
+        if (Math.random() < dt * 22) {
+          d.g.getWorldPosition(tmp);
+          const j = di++ % N;
+          dp.set([tmp.x - 0.8 + Math.random() * 1.6, 0.25 + Math.random() * 0.3, tmp.z + (Math.random() - 0.5)], j * 3);
+          dv[j].set(speed * 0.82 + (Math.random() - 0.5), 0.8 + Math.random() * 1.2, (Math.random() - 0.5) * 0.8);
+          dl[j] = 1.2 + Math.random();
+        }
+      });
     },
   };
 }

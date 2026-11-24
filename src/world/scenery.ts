@@ -3,6 +3,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { snowTex, softDot } from "./tex";
+import { animateCrowd, festiveStation, lights, swag, treeSpiral, twinkleMaterial, type Crowd } from "./festive";
 
 export const STRIP = 640;
 
@@ -106,13 +107,15 @@ export function gisPin() {
   return g;
 }
 
-export type Strip = { group: THREE.Group; pins: THREE.Object3D[] };
+export type Strip = { group: THREE.Group; pins: THREE.Object3D[]; festive?: { x: number; crowd: Crowd; tree: THREE.Group } };
+type Shared = { spruce: THREE.BufferGeometry; treeMat: THREE.Material; snow: THREE.Texture; glow: THREE.Texture; lightMat: THREE.Material };
 
-export function makeStrip(trees: number, seed: number, shared: { spruce: THREE.BufferGeometry; treeMat: THREE.Material; snow: THREE.Texture; glow: THREE.Texture }): Strip {
+export function makeStrip(trees: number, seed: number, shared: Shared, withFestive: boolean): Strip {
   s = seed;
   const group = new THREE.Group();
   const L = STRIP;
   const pins: THREE.Object3D[] = [];
+  const fest = { x: -40 };
 
   // Земля
   const ground = new THREE.Mesh(
@@ -156,10 +159,30 @@ export function makeStrip(trees: number, seed: number, shared: { spruce: THREE.B
     h.rotation.y = (rnd() - 0.5) * 0.6;
     group.add(h);
   }
+  const vPosts: THREE.Vector3[] = [];
   for (let i = 0; i < 4; i++) {
     const lp = lamp(shared.glow);
     lp.position.set(village.x - 24 + i * 16, 0, village.z - 9);
     group.add(lp);
+    vPosts.push(new THREE.Vector3(village.x - 24 + i * 16, 4.0, village.z - 9));
+  }
+  const vLights: THREE.Vector3[] = [];
+  for (let i = 0; i < vPosts.length - 1; i++) vLights.push(...swag(vPosts[i], vPosts[i + 1], 1.2, 0.45));
+  group.add(lights(vLights, shared.lightMat));
+
+  // праздничный полустанок (только на одной из двух полос, чтобы он встречался реже)
+  let festive: Strip["festive"];
+  if (withFestive) {
+    const warm2 = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 1.55, 0.7) });
+    const f = festiveStation(rnd, shared.glow, shared.lightMat, warm2);
+    f.group.position.x = fest.x;
+    group.add(f.group);
+    const pin = gisPin();
+    pin.position.set(fest.x + 12, 11, -11);
+    pin.scale.setScalar(1.4);
+    group.add(pin);
+    pins.push(pin);
+    festive = { x: fest.x, crowd: f.crowd, tree: f.tree };
   }
 
   // Станция с платформой, фонарями и пином 2ГИС
@@ -170,11 +193,17 @@ export function makeStrip(trees: number, seed: number, shared: { spruce: THREE.B
   const pSnow = new THREE.Mesh(new THREE.BoxGeometry(46, 0.08, 4), new THREE.MeshStandardMaterial({ color: "#eef3fb" }));
   pSnow.position.set(st.x, 0.94, 4.6);
   group.add(pSnow);
+  const stPosts: THREE.Vector3[] = [];
   for (let i = 0; i < 5; i++) {
     const lp = lamp(shared.glow);
     lp.position.set(st.x - 20 + i * 10, 0.9, 6.1);
     group.add(lp);
+    stPosts.push(new THREE.Vector3(st.x - 20 + i * 10, 4.9, 6.1));
   }
+  // гирлянды между фонарями станции
+  const stLights: THREE.Vector3[] = [];
+  for (let i = 0; i < stPosts.length - 1; i++) stLights.push(...swag(stPosts[i], stPosts[i + 1], 0.9, 0.42));
+  group.add(lights(stLights, shared.lightMat, true));
   const station = house(warm);
   station.scale.set(1.8, 1.4, 1.5);
   station.position.set(st.x, 0, 11.5);
@@ -188,6 +217,7 @@ export function makeStrip(trees: number, seed: number, shared: { spruce: THREE.B
   // Столбы с проводами
   const poleMat = new THREE.MeshStandardMaterial({ color: "#2b2420", roughness: 1 });
   for (let x = -L / 2; x < L / 2; x += 32) {
+    if (withFestive && Math.abs(x - fest.x) < 34) continue; // у полустанка столбов нет
     const p = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 7, 6), poleMat);
     p.position.set(x, 3.5, -6.5);
     group.add(p);
@@ -195,11 +225,13 @@ export function makeStrip(trees: number, seed: number, shared: { spruce: THREE.B
     bar.position.set(x, 6.6, -6.5);
     group.add(bar);
   }
-  for (const dz of [-0.6, 0.6]) {
-    const wire = new THREE.Mesh(new THREE.BoxGeometry(L, 0.03, 0.03), new THREE.MeshBasicMaterial({ color: "#141821" }));
-    wire.position.set(0, 6.7, -6.5 + dz);
-    group.add(wire);
-  }
+  const spans: [number, number][] = withFestive ? [[-L / 2, fest.x - 34], [fest.x + 34, L / 2]] : [[-L / 2, L / 2]];
+  for (const [x0, x1] of spans)
+    for (const dz of [-0.6, 0.6]) {
+      const wire = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.03, 0.03), new THREE.MeshBasicMaterial({ color: "#141821" }));
+      wire.position.set((x0 + x1) / 2, 6.7, -6.5 + dz);
+      group.add(wire);
+    }
 
   // Лес
   const inst = new THREE.InstancedMesh(shared.spruce, shared.treeMat, trees);
@@ -209,6 +241,7 @@ export function makeStrip(trees: number, seed: number, shared: { spruce: THREE.B
   const col = new THREE.Color();
   let placed = 0;
   let guard = 0;
+  const fairy: THREE.Vector3[] = [];
   while (placed < trees && guard++ < trees * 20) {
     const x = -L / 2 + rnd() * L;
     const side = rnd() < 0.5 ? -1 : 1;
@@ -218,6 +251,9 @@ export function makeStrip(trees: number, seed: number, shared: { spruce: THREE.B
     if (Math.hypot(x - village.x, z - village.z) < village.r + 6) continue;
     if (Math.abs(x - st.x) < 30 && z > 0 && z < 22) continue;
     if (Math.abs(z + 6.5) < 2.5) continue; // столбы
+    // ближний к зрителю край — снежная поляна: виден поезд, по ней бегут олени
+    if (z > 8 && z < 30 && rnd() < 0.8) continue;
+    if (Math.abs(x - fest.x) < 34 && z < 0 && z > -26) continue; // полустанок
     const k = 0.75 + rnd() * 1.25 + (Math.abs(z) > 60 ? 0.5 : 0);
     pos.set(x, 0, z);
     q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rnd() * Math.PI * 2);
@@ -226,8 +262,11 @@ export function makeStrip(trees: number, seed: number, shared: { spruce: THREE.B
     inst.setMatrixAt(placed, m);
     col.setHSL(0.38 + rnd() * 0.05, 0.25 + rnd() * 0.2, 0.75 + rnd() * 0.3);
     inst.setColorAt(placed, col);
+    // часть елей у дороги наряжена огоньками — лес как из сказки
+    if (Math.abs(z) < 60 && rnd() < 0.09) fairy.push(...treeSpiral(x, z, k, 22));
     placed++;
   }
+  group.add(lights(fairy, shared.lightMat));
   inst.count = placed;
   group.add(inst);
 
@@ -240,7 +279,7 @@ export function makeStrip(trees: number, seed: number, shared: { spruce: THREE.B
   const sparks = new THREE.Points(sg, new THREE.PointsMaterial({ map: shared.glow, size: 0.35, color: new THREE.Color(1.4, 1.5, 1.8), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   group.add(sparks);
 
-  return { group, pins };
+  return { group, pins, festive };
 }
 
 export function makeScenery(scene: THREE.Scene, treesPerStrip: number) {
@@ -249,15 +288,26 @@ export function makeScenery(scene: THREE.Scene, treesPerStrip: number) {
     treeMat: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true }),
     snow: snowTex(),
     glow: softDot(),
+    lightMat: null as unknown as THREE.ShaderMaterial,
   };
-  const a = makeStrip(treesPerStrip, 11, shared);
-  const b = makeStrip(treesPerStrip, 11, shared);
-  a.group.position.x = 0;
-  b.group.position.x = STRIP;
+  shared.lightMat = twinkleMaterial(shared.glow);
+  const a = makeStrip(treesPerStrip, 11, shared, true);
+  const b = makeStrip(treesPerStrip, 11, shared, false);
+  // полустанок встречается секунд через 20 после старта; ?fest ставит его прямо у поезда (для проверки)
+  const fq = new URLSearchParams(location.search).get("fest");
+  const startX = fq !== null ? 40 + (Number(fq) || 0) : 300;
+  a.group.position.x = startX;
+  b.group.position.x = startX - STRIP;
   scene.add(a.group, b.group);
   const strips = [a, b];
   return {
+    /** Где сейчас праздничный полустанок (мировой x) — для гудка. */
+    festiveX: () => a.group.position.x + a.festive!.x,
     update(dx: number, t: number) {
+      shared.lightMat.uniforms.t.value = t;
+      const fx = a.group.position.x + a.festive!.x;
+      animateCrowd(a.festive!.crowd, t, THREE.MathUtils.smoothstep(70 - Math.abs(fx), 0, 55));
+      a.festive!.tree.children.forEach((c) => c.userData.spin && (c.rotation.y = t * 1.2));
       for (const st of strips) {
         st.group.position.x -= dx;
         if (st.group.position.x < -STRIP) st.group.position.x += STRIP * 2;

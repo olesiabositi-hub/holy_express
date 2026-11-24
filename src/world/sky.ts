@@ -91,15 +91,88 @@ export function makeSky(scene: THREE.Scene) {
       }`,
   });
   const aurora = new THREE.Mesh(new THREE.PlaneGeometry(1500, 360, 1, 1), auroraMat);
-  aurora.position.set(80, 230, -700);
+  aurora.position.set(80, 165, -700);
   group.add(aurora);
+  // второй, розово-фиолетовый занавес — виден только на пике
+  const aurora2Mat = auroraMat.clone();
+  aurora2Mat.fragmentShader = auroraMat.fragmentShader.replace("vec3(0.15,1.0,0.55), vec3(0.3,0.55,1.0)", "vec3(0.35,1.0,0.7), vec3(0.85,0.35,1.0)");
+  const aurora2 = new THREE.Mesh(new THREE.PlaneGeometry(1200, 300, 1, 1), aurora2Mat);
+  aurora2.position.set(-260, 210, -650);
+  aurora2.rotation.y = 0.35;
+  group.add(aurora2);
+
+  // Падающие звёзды
+  const SN = 40;
+  const sp = new Float32Array(SN * 3);
+  const sa = new Float32Array(SN);
+  const sgeo = new THREE.BufferGeometry();
+  sgeo.setAttribute("position", new THREE.BufferAttribute(sp, 3));
+  sgeo.setAttribute("tw", new THREE.BufferAttribute(sa, 1));
+  const shootMat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    fog: false,
+    blending: THREE.AdditiveBlending,
+    uniforms: { map: { value: softDot() } },
+    vertexShader: `attribute float tw; varying float a; void main(){ a = tw; vec4 mv = modelViewMatrix*vec4(position,1.); gl_PointSize = 1.0 + 7.0*tw; gl_Position = projectionMatrix*mv; }`,
+    fragmentShader: `uniform sampler2D map; varying float a; void main(){ vec4 c = texture2D(map, gl_PointCoord); gl_FragColor = vec4(vec3(1.0,0.95,0.85)*1.6, c.a*a); }`,
+  });
+  const shoot = new THREE.Points(sgeo, shootMat);
+  shoot.frustumCulled = false;
+  group.add(shoot);
+  let shootNext = 8 + Math.random() * 10;
+  let shootT = -1;
+  const sFrom = new THREE.Vector3(), sDir = new THREE.Vector3();
+
+  // Сияние вспышками: долго тихо, потом разгорается на полминуты
+  let level = 0.12;
+  let episode = -1;
+  let nextEpisode = new URLSearchParams(location.search).has("aurora") ? 0 : 20 + Math.random() * 20;
 
   return {
-    update(t: number) {
+    update(t: number, dt = 0.016) {
       starMat.uniforms.t.value = t;
       auroraMat.uniforms.t.value = t;
-      // сияние то разгорается, то гаснет
-      auroraMat.uniforms.strength.value = 0.25 + 0.35 * Math.max(0, Math.sin(t * 0.05));
+      aurora2Mat.uniforms.t.value = t * 1.3 + 40;
+      if (episode < 0) {
+        nextEpisode -= dt;
+        if (nextEpisode <= 0) episode = 0;
+      } else {
+        episode += dt;
+        if (episode > 34) {
+          episode = -1;
+          nextEpisode = 45 + Math.random() * 50;
+        }
+      }
+      const peak = episode < 0 ? 0 : Math.sin(Math.min(1, episode / 34) * Math.PI);
+      const target = 0.12 + peak * 0.95;
+      level += (target - level) * Math.min(1, dt * 1.5);
+      auroraMat.uniforms.strength.value = level;
+      aurora2Mat.uniforms.strength.value = Math.max(0, level - 0.3) * 0.9;
+
+      if (shootT < 0) {
+        shootNext -= dt;
+        if (shootNext <= 0) {
+          shootT = 0;
+          const u = Math.random() * Math.PI * 0.8 - Math.PI * 0.9;
+          sFrom.set(Math.cos(u) * 700, 380 + Math.random() * 160, Math.sin(u) * 700);
+          sDir.set(Math.random() - 0.5, -0.45, Math.random() - 0.5).normalize().multiplyScalar(520);
+        }
+      } else {
+        shootT += dt;
+        const k = shootT / 1.1;
+        for (let i = 0; i < SN; i++) {
+          const kk = Math.max(0, k - i * 0.006);
+          sp.set([sFrom.x + sDir.x * kk, sFrom.y + sDir.y * kk, sFrom.z + sDir.z * kk], i * 3);
+          sa[i] = k > 1 ? 0 : (1 - i / SN) * Math.sin(Math.min(1, k) * Math.PI);
+        }
+        sgeo.attributes.position.needsUpdate = true;
+        sgeo.attributes.tw.needsUpdate = true;
+        if (k > 1.2) {
+          shootT = -1;
+          shootNext = 10 + Math.random() * 18;
+        }
+      }
     },
   };
 }
@@ -141,8 +214,8 @@ export function makeMountains(scene: THREE.Scene) {
     scene.add(g2);
     layers.push({ g, k, span }, { g: g2, k, span });
   };
-  mk(330, 0.18, 26, [60, 130], "#2c4675");
-  mk(520, 0.08, 22, [110, 220], "#243a66");
+  mk(330, 0.18, 26, [35, 80], "#2c4675");
+  mk(520, 0.08, 22, [70, 140], "#243a66");
   return {
     update(dx: number) {
       for (const l of layers) {

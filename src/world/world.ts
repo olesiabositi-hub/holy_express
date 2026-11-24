@@ -8,7 +8,8 @@ import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { makeMountains, makeSky } from "./sky";
 import { makeScenery } from "./scenery";
 import { makeTrain } from "./train";
-import { makeFinaleTree, makeSanta, makeSnow, makeSteam } from "./fx";
+import { makeFinaleTree, makeReindeer, makeSanta, makeSnow, makeSteam } from "./fx";
+import { setTrainMoving, whistle } from "../audio";
 
 export type Tier = 0 | 1 | 2;
 
@@ -59,6 +60,14 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
   const steam = makeSteam(scene, train.chimney);
   const santa = makeSanta(scene);
   const tree = makeFinaleTree(scene);
+  const deer = makeReindeer(scene);
+  // свисток паровоза: отдельное облачко пара, валит только во время гудка
+  const whistleSteam = makeSteam(scene, new THREE.Vector3(22.8, 4.6, 0), false, 60);
+  const toot = () => {
+    whistleSteam.puff(2.6);
+    whistle();
+  };
+  let festPrev = scenery.festiveX();
 
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
@@ -77,9 +86,9 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
   controls.maxPolarAngle = 1.38;
   controls.autoRotate = !reduceMotion;
   controls.autoRotateSpeed = 0.18;
-  controls.target.set(-2, 2, 0);
+  controls.target.set(-2, 7, 0);
 
-  const HUB_BASE = new THREE.Vector3(-36, 21, 40);
+  const HUB_BASE = new THREE.Vector3(-40, 14, 40);
   const HUB_POS = new THREE.Vector3();
   const hubFor = () => {
     // на узком вертикальном экране отъезжаем дальше, чтобы поезд влез целиком
@@ -100,7 +109,7 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
     controls.enabled = false;
     shot = { from: camera.position.clone(), to: pos, tFrom: controls.target.clone(), tTo: target, k: 0, dur, done };
   };
-  if (!skipIntro) fly(HUB_POS.clone(), new THREE.Vector3(-2, 2, 0), reduceMotion ? 0.01 : 5.5, () => (controls.enabled = true));
+  if (!skipIntro) fly(HUB_POS.clone(), new THREE.Vector3(-2, 7, 0), reduceMotion ? 0.01 : 5.5, () => (controls.enabled = true));
 
   let mode: "hub" | "focus" | "finale" = "hub";
   let focused = -1;
@@ -168,7 +177,13 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
     travelled += dx;
     scenery.update(dx, t);
     mountains.update(dx);
-    sky.update(t);
+    sky.update(t, dt);
+    deer.update(dt, t, speed, !reduceMotion);
+    whistleSteam.update(dt, speed);
+    // праздничный полустанок впереди — поезд гудит в ответ машущим людям
+    const festNow = scenery.festiveX();
+    if (festPrev > 52 && festNow <= 52 && speed > 2) toot();
+    festPrev = festNow;
     train.update(dt, t, speed);
     steam.update(dt, speed);
     snow.update(t, travelled, tmp.set(camera.position.x * 0.5, 0, camera.position.z * 0.4));
@@ -240,7 +255,7 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
     unfocus() {
       if (focused >= 0) train.carByCase(focused).openTarget = 0;
       focused = -1;
-      fly(HUB_POS.clone(), new THREE.Vector3(-2, 2, 0), 1.8, () => {
+      fly(HUB_POS.clone(), new THREE.Vector3(-2, 7, 0), 1.8, () => {
         mode = "hub";
         controls.enabled = true;
         controls.autoRotate = !reduceMotion;
@@ -251,6 +266,8 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
       if (focused >= 0) train.carByCase(focused).openTarget = 0;
       focused = -1;
       speedTarget = 0;
+      setTrainMoving(false);
+      setTimeout(toot, 2600);
       // ёлка вырастает впереди состава, мир останавливается
       setTimeout(() => tree.start(new THREE.Vector3(58, 0, -30)), 1200);
       fly(new THREE.Vector3(-30, 16, 62), new THREE.Vector3(34, 20, -20), 3.2, () => {
@@ -264,10 +281,12 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
     leaveFinale() {
       mode = "hub";
       speedTarget = 11;
+      setTrainMoving(true);
       controls.minDistance = 28;
       hubFor();
-      fly(HUB_POS.clone(), new THREE.Vector3(-2, 2, 0), 2.2, () => (controls.enabled = true));
+      fly(HUB_POS.clone(), new THREE.Vector3(-2, 7, 0), 2.2, () => (controls.enabled = true));
     },
+    toot,
     get mode() {
       return mode;
     },

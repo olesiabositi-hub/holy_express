@@ -2,6 +2,7 @@
 import { CASES } from "../story/cases";
 import { fmtTime, isOpen, PREVIEW, resetAll, save, type Save } from "../state";
 import { openCase } from "./casePanel";
+import { setSound, soundOn, unlockAudio } from "../audio";
 
 type WorldApi = {
   screenOf: (i: number) => { x: number; y: number; visible: boolean };
@@ -42,11 +43,21 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
   top.innerHTML = `<div class="brand"><div class="brand-flake">❄️</div><div><h1>Код-фриз экспресс</h1><p>Последний релизный поезд года · Петербург → Рускеала · 21–25 декабря</p></div></div>
     <div class="spacer"></div>${PREVIEW ? `<span class="preview-badge hide-sm">Предпросмотр: все вагоны открыты</span>` : ""}
     <span class="progress-pill"><span class="hide-sm">Раскрыто </span><b class="pc">0</b><span class="hide-sm"> из 5</span><span class="show-sm">/5</span></span>
+    <button class="icon-btn" data-a="sound" aria-label="Звук"></button>
     <button class="icon-btn" data-a="notes">🗒️<span class="hide-sm"> Блокнот</span></button>
     <button class="icon-btn" data-a="rules">❔<span class="hide-sm"> Правила</span></button>`;
   root.appendChild(top);
   top.querySelector<HTMLButtonElement>('[data-a="notes"]')!.onclick = () => showNotes();
   top.querySelector<HTMLButtonElement>('[data-a="rules"]')!.onclick = () => showRules();
+  const soundBtn = top.querySelector<HTMLButtonElement>('[data-a="sound"]')!;
+  const paintSound = () => (soundBtn.textContent = soundOn() ? "🔊" : "🔇");
+  paintSound();
+  soundBtn.onclick = () => {
+    setSound(!soundOn());
+    paintSound();
+  };
+  // браузеры дают включить звук только после первого действия игрока
+  addEventListener("pointerdown", () => unlockAudio(), { once: true });
 
   // ---------- Плашка над вагоном ----------
   const tag = el("div", "gis-tag hidden", `<div class="bubble"></div><div class="tail"></div>`);
