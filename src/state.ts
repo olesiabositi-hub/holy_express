@@ -46,8 +46,9 @@ export function resetAll() {
 }
 
 const params = new URLSearchParams(location.search);
-/** ?preview открывает все вагоны сразу — для проверки до 21 декабря. */
-export const PREVIEW = params.has("preview");
+/** ?preview или #preview открывает все вагоны сразу — для проверки до 21 декабря.
+ *  Сборка с VITE_PREVIEW_ALL=1 (витринная ссылка) открывает их всегда. */
+export const PREVIEW = params.has("preview") || location.hash === "#preview" || import.meta.env.VITE_PREVIEW_ALL === "1";
 
 export function today(): string {
   const d = params.get("date"); // ?date=2026-12-23 — посмотреть, как игра выглядит в конкретный день

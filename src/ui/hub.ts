@@ -231,10 +231,16 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
       (m.parentElement as HTMLElement).remove();
       startFinale();
     };
-    m.querySelector<HTMLButtonElement>("[data-reset]")!.onclick = () => {
-      if (confirm("Стереть весь прогресс в этом браузере?")) {
+    const rb = m.querySelector<HTMLButtonElement>("[data-reset]")!;
+    rb.onclick = () => {
+      // confirm() в некоторых встраиваниях запрещён — подтверждаем вторым нажатием
+      if (rb.dataset.armed) {
         resetAll();
         location.reload();
+      } else {
+        rb.dataset.armed = "1";
+        rb.textContent = "Точно стереть? Нажми ещё раз";
+        rb.style.color = "var(--red)";
       }
     };
   }
