@@ -4,23 +4,29 @@ import type { Cell, Clue } from "../puzzle/engine";
 export const SOLUTIONS: Record<string, { pos: Cell[]; clues: Clue[] }> = {
  "baggage": {
   "pos": [
-   20,
-   1,
-   7,
-   19,
-   13
+   23,
+   11,
+   9,
+   2,
+   15
   ],
   "clues": [
    [
     {
-     "t": "zone",
-     "z": "K"
+     "t": "beside",
+     "k": "B"
     }
    ],
    [
     {
-     "t": "adj",
-     "k": "M"
+     "t": "west",
+     "j": 0
+    }
+   ],
+   [
+    {
+     "t": "row",
+     "i": 1
     }
    ],
    [
@@ -31,249 +37,234 @@ export const SOLUTIONS: Record<string, { pos: Cell[]; clues: Clue[] }> = {
    ],
    [
     {
-     "t": "adj",
-     "k": "O"
-    }
-   ],
-   [
-    {
-     "t": "adj",
-     "k": "H"
+     "t": "col",
+     "i": 0
     }
    ]
   ]
  },
  "platzkart": {
   "pos": [
-   18,
-   32,
    16,
-   27,
-   5,
-   7
+   2,
+   19,
+   35,
+   24,
+   9
   ],
   "clues": [
    [
     {
-     "t": "adj",
-     "k": "V"
+     "t": "row",
+     "i": 2
     }
    ],
    [
     {
-     "t": "adj",
-     "k": "O"
+     "t": "north",
+     "j": 5
     }
    ],
    [
     {
-     "t": "zone",
-     "z": "2"
+     "t": "with",
+     "j": 1
     }
    ],
    [
     {
-     "t": "adj",
-     "k": "K"
-    },
+     "t": "col",
+     "i": 5
+    }
+   ],
+   [
     {
      "t": "zone",
      "z": "П"
+    },
+    {
+     "t": "corner"
     }
    ],
    [
     {
      "t": "on",
-     "k": "N"
-    },
-    {
-     "t": "zone",
-     "z": "2"
-    }
-   ],
-   [
-    {
-     "t": "adj",
-     "k": "N"
+     "k": "V"
     }
    ]
   ]
  },
  "kupe": {
   "pos": [
-   7,
-   29,
-   22,
-   33,
-   14,
-   0
+   30,
+   17,
+   19,
+   4,
+   8,
+   27
   ],
   "clues": [
    [
     {
-     "t": "adj",
-     "k": "N"
-    },
-    {
-     "t": "zone",
-     "z": "1"
+     "t": "south",
+     "j": 5
     }
    ],
    [
     {
-     "t": "notZone",
-     "z": "1"
+     "t": "with",
+     "j": 3
     }
    ],
    [
     {
-     "t": "adj",
+     "t": "beside",
      "k": "Z"
+    },
+    {
+     "t": "corner"
     }
    ],
    [
     {
-     "t": "notZone",
-     "z": "П"
+     "t": "west",
+     "j": 1
     }
    ],
    [
     {
-     "t": "adj",
-     "k": "N"
-    }
-   ],
-   [
-    {
-     "t": "on",
-     "k": "N"
+     "t": "beside",
+     "k": "V"
     },
     {
      "t": "zone",
-     "z": "1"
+     "z": "2"
+    }
+   ],
+   [
+    {
+     "t": "col",
+     "i": 3
     }
    ]
   ]
  },
  "restaurant": {
   "pos": [
+   9,
+   23,
    30,
-   20,
-   16,
-   5,
-   7,
-   27
+   1,
+   28,
+   14
   ],
   "clues": [
    [
     {
-     "t": "window"
+     "t": "col",
+     "i": 3
+    }
+   ],
+   [
+    {
+     "t": "rowNorth",
+     "j": 4
+    }
+   ],
+   [
+    {
+     "t": "alone"
+    }
+   ],
+   [
+    {
+     "t": "zone",
+     "z": "Б"
+    },
+    {
+     "t": "corner"
     }
    ],
    [
     {
      "t": "notZone",
-     "z": "В"
-    }
-   ],
-   [
-    {
-     "t": "adj",
-     "k": "T"
-    },
-    {
-     "t": "zone",
      "z": "З"
     }
    ],
    [
     {
-     "t": "adj",
-     "k": "C"
+     "t": "zone",
+     "z": "З"
     },
     {
-     "t": "window"
-    }
-   ],
-   [
-    {
-     "t": "on",
-     "k": "X"
-    }
-   ],
-   [
-    {
-     "t": "zone",
-     "z": "К"
+     "t": "notWith",
+     "j": 1
     }
    ]
   ]
  },
  "locomotive": {
   "pos": [
-   41,
-   15,
-   5,
-   21,
-   11,
-   44,
-   31
+   19,
+   31,
+   23,
+   35,
+   1,
+   46,
+   13
   ],
   "clues": [
    [
     {
-     "t": "adj",
-     "k": "Y"
-    },
-    {
-     "t": "zone",
-     "z": "У"
+     "t": "col",
+     "i": 5
     }
    ],
    [
     {
-     "t": "notAdj",
-     "k": "F"
-    }
-   ],
-   [
-    {
-     "t": "adj",
+     "t": "beside",
      "k": "D"
     },
     {
-     "t": "window"
+     "t": "corner"
     }
    ],
    [
     {
      "t": "notZone",
-     "z": "К"
-    }
-   ],
-   [
-    {
-     "t": "adj",
-     "k": "D"
-    },
-    {
-     "t": "zone",
      "z": "Т"
     }
    ],
    [
     {
-     "t": "adj",
-     "k": "A"
-    },
-    {
-     "t": "window"
+     "t": "onlyOn",
+     "k": "U"
     }
    ],
    [
     {
-     "t": "adj",
-     "k": "D"
+     "t": "zone",
+     "z": "К"
+    },
+    {
+     "t": "north",
+     "j": 6
+    }
+   ],
+   [
+    {
+     "t": "zone",
+     "z": "У"
+    },
+    {
+     "t": "south",
+     "j": 1
+    }
+   ],
+   [
+    {
+     "t": "east",
+     "j": 0
     }
    ]
   ]

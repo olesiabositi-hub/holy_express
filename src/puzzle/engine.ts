@@ -1,52 +1,70 @@
 // Движок мурдоку. Без three.js и DOM: только правила, чтобы всё проверялось тестами.
 //
-// Правила одного дела:
-// 1. Поле N×N, на нём N фигур: подозреваемые и улика.
+// Правила (как на murdoku.com):
+// 1. Поле N×N разбито на зоны. На поле N фигур: подозреваемые и улика (у нас вместо жертвы).
 // 2. В каждой строке и в каждом столбце ровно одна фигура.
-// 3. На «занятые» клетки (стеллаж, стол, плита) встать нельзя.
-// 4. У каждой фигуры одна улика-показание: где она была.
+// 3. На занятые клетки (стол, стеллаж, плита) встать нельзя; на стул, полку, диван — можно.
+// 4. У каждой фигуры есть показание. «Рядом» — слева, справа, сверху или снизу И в той же зоне.
 // 5. Виновный — единственный подозреваемый, оказавшийся в одной зоне с уликой.
 
 export type Posture = "sit" | "stand" | "lie";
 export type Gender = "m" | "f";
 
 export type ObjKind = {
-  ch: string; // символ в плане
-  name: string; // «нижняя полка» — подпись в легенде
-  icon: string; // эмодзи на поле
-  blocked?: boolean; // встать нельзя
-  posture: Posture; // как на ней находятся: сидят, стоят, лежат
-  on?: string; // «на нижней полке» — для улики «сидела на нижней полке»
+  ch: string;
+  name: string;
+  icon: string;
+  blocked?: boolean;
+  posture: Posture;
+  on?: string; // «на нижней полке»
   near: string; // «рядом с розеткой»
+  gen?: string; // «розетки» — для «единственная у розетки» не нужно, для «не рядом» есть near
 };
 
-export type Region = { ch: string; name: string; in: string }; // in: «в серверном углу»
+export type Region = { ch: string; name: string; in: string };
 
 export type Layout = {
   n: number;
-  regions: string[]; // N строк по N символов — зоны
-  objects: string[]; // N строк по N символов — предметы, «.» пусто
+  regions: string[];
+  objects: string[];
   kinds: ObjKind[];
   zones: Region[];
-  windows: boolean; // верхний и нижний ряды у окон
+  windows: boolean;
 };
 
 export type Pred =
   | { t: "on"; k: string }
-  | { t: "adj"; k: string }
-  | { t: "notAdj"; k: string }
+  | { t: "beside"; k: string }
+  | { t: "notBeside"; k: string }
   | { t: "zone"; z: string }
   | { t: "notZone"; z: string }
   | { t: "window" }
-  | { t: "notWindow" };
+  | { t: "notWindow" }
+  | { t: "col"; i: number }
+  | { t: "row"; i: number }
+  | { t: "corner" }
+  | { t: "alone" }
+  | { t: "onlyOn"; k: string }
+  | { t: "north"; j: number }
+  | { t: "south"; j: number }
+  | { t: "west"; j: number }
+  | { t: "east"; j: number }
+  | { t: "rowNorth"; j: number }
+  | { t: "with"; j: number }
+  | { t: "notWith"; j: number };
 
-export type Clue = Pred[]; // все условия сразу («на нижней полке у окна»)
+export type Clue = Pred[];
 
-export type Figure = { id: string; name: string; gender: Gender; item?: boolean };
+export type Figure = { id: string; name: string; gender: Gender; item?: boolean; gen: string; ins: string };
 
-export type Cell = number; // r * n + c
+export type Cell = number;
 
 export const rc = (n: number, cell: Cell) => [Math.floor(cell / n), cell % n] as const;
+export const ROWS = "АБВГДЕЖЗИК";
+export const cellName = (n: number, cell: Cell) => {
+  const [r, c] = rc(n, cell);
+  return `${ROWS[r]}${c + 1}`;
+};
 
 export function kindAt(l: Layout, cell: Cell): ObjKind | undefined {
   const [r, c] = rc(l.n, cell);
@@ -69,15 +87,29 @@ export function neighbours(n: number, cell: Cell): Cell[] {
   return out;
 }
 
-export function holds(l: Layout, cell: Cell, p: Pred): boolean {
-  const [r] = rc(l.n, cell);
+/** «Рядом» по правилам мурдоку: соседняя клетка в той же зоне. */
+export const besideKind = (l: Layout, cell: Cell, k: string) =>
+  neighbours(l.n, cell).some((x) => zoneAt(l, x) === zoneAt(l, cell) && kindAt(l, x)?.ch === k);
+
+/** Угол зоны: клетка касается стены зоны и по горизонтали, и по вертикали. */
+export function isCorner(l: Layout, cell: Cell) {
+  const [r, c] = rc(l.n, cell);
+  const z = zoneAt(l, cell);
+  const out = (rr: number, cc: number) => rr < 0 || cc < 0 || rr >= l.n || cc >= l.n || l.regions[rr][cc] !== z;
+  return (out(r - 1, c) || out(r + 1, c)) && (out(r, c - 1) || out(r, c + 1));
+}
+
+const isUnary = (p: Pred) => !("j" in p) && p.t !== "alone" && p.t !== "onlyOn";
+
+export function holdsUnary(l: Layout, cell: Cell, p: Pred): boolean {
+  const [r, c] = rc(l.n, cell);
   switch (p.t) {
     case "on":
       return kindAt(l, cell)?.ch === p.k;
-    case "adj":
-      return neighbours(l.n, cell).some((x) => kindAt(l, x)?.ch === p.k);
-    case "notAdj":
-      return !neighbours(l.n, cell).some((x) => kindAt(l, x)?.ch === p.k);
+    case "beside":
+      return besideKind(l, cell, p.k);
+    case "notBeside":
+      return !besideKind(l, cell, p.k);
     case "zone":
       return zoneAt(l, cell) === p.z;
     case "notZone":
@@ -86,33 +118,109 @@ export function holds(l: Layout, cell: Cell, p: Pred): boolean {
       return l.windows && (r === 0 || r === l.n - 1);
     case "notWindow":
       return !(l.windows && (r === 0 || r === l.n - 1));
+    case "col":
+      return c === p.i;
+    case "row":
+      return r === p.i;
+    case "corner":
+      return isCorner(l, cell);
+    case "onlyOn":
+      return kindAt(l, cell)?.ch === p.k;
+    default:
+      return true;
   }
 }
 
-export const satisfies = (l: Layout, cell: Cell, clue: Clue) =>
-  !isBlocked(l, cell) && clue.every((p) => holds(l, cell, p));
+/** Отношение между двумя клетками для парной улики (a — тот, у кого улика). */
+export function holdsPair(l: Layout, p: Pred, a: Cell, b: Cell): boolean {
+  const [ra, ca] = rc(l.n, a);
+  const [rb, cb] = rc(l.n, b);
+  switch (p.t) {
+    case "north":
+      return ra < rb;
+    case "south":
+      return ra > rb;
+    case "west":
+      return ca < cb;
+    case "east":
+      return ca > cb;
+    case "rowNorth":
+      return ra === rb - 1;
+    case "with":
+      return zoneAt(l, a) === zoneAt(l, b);
+    case "notWith":
+    case "alone":
+      return zoneAt(l, a) !== zoneAt(l, b);
+    default:
+      return true;
+  }
+}
 
-export function candidates(l: Layout, clue: Clue): Cell[] {
+/** Разворачиваем улики в одноместные фильтры и парные связи. */
+export function compile(l: Layout, clues: Clue[]) {
+  const N = clues.length;
+  const unary: Pred[][] = clues.map((cl) => cl.filter(isUnary));
+  const pairs: { a: number; b: number; p: Pred }[] = [];
+  clues.forEach((cl, a) => {
+    for (const p of cl) {
+      if ("j" in p) pairs.push({ a, b: p.j, p });
+      if (p.t === "alone") for (let b = 0; b < N; b++) if (b !== a) pairs.push({ a, b, p });
+      if (p.t === "onlyOn") {
+        unary[a].push(p);
+        for (let b = 0; b < N; b++) if (b !== a) unary[b].push({ t: "notOn" as never, k: p.k } as never);
+      }
+    }
+  });
+  const okUnary = (f: number, cell: Cell) =>
+    !isBlocked(l, cell) &&
+    unary[f].every((p) => ((p.t as string) === "notOn" ? kindAt(l, cell)?.ch !== (p as { k: string }).k : holdsUnary(l, cell, p)));
+  return { N, unary, pairs, okUnary };
+}
+
+export function candidates(l: Layout, clues: Clue[], f: number): Cell[] {
+  const { okUnary } = compile(l, clues);
   const out: Cell[] = [];
-  for (let i = 0; i < l.n * l.n; i++) if (satisfies(l, i, clue)) out.push(i);
+  for (let i = 0; i < l.n * l.n; i++) if (okUnary(f, i)) out.push(i);
   return out;
+}
+
+/** Проверка полной (или частичной) расстановки: какие фигуры нарушают свою улику. */
+export function violations(l: Layout, clues: Clue[], pos: (Cell | null)[]): Set<number> {
+  const { okUnary, pairs } = compile(l, clues);
+  const bad = new Set<number>();
+  pos.forEach((c, f) => {
+    if (c !== null && !okUnary(f, c)) bad.add(f);
+  });
+  for (const { a, b, p } of pairs) {
+    const ca = pos[a], cb = pos[b];
+    if (ca === null || cb === null) continue;
+    if (!holdsPair(l, p, ca, cb)) bad.add(a);
+  }
+  return bad;
 }
 
 // ---------- Решатели ----------
 
-/** Все решения полным перебором (N ≤ 7, это быстро). */
+/** Все решения полным перебором (N ≤ 8 — быстро). */
 export function allSolutions(l: Layout, clues: Clue[], limit = 2): Cell[][] {
   const n = l.n;
-  const cands = clues.map((c) => candidates(l, c));
+  const { N, okUnary, pairs } = compile(l, clues);
+  const cands = Array.from({ length: N }, (_, f) => {
+    const out: Cell[] = [];
+    for (let i = 0; i < n * n; i++) if (okUnary(f, i)) out.push(i);
+    return out;
+  });
   const order = cands.map((_, i) => i).sort((a, b) => cands[a].length - cands[b].length);
   const rows = new Array(n).fill(false);
   const cols = new Array(n).fill(false);
-  const pos: Cell[] = new Array(clues.length);
+  const pos: (Cell | null)[] = new Array(N).fill(null);
   const out: Cell[][] = [];
+  const pairOk = (f: number) =>
+    pairs.every(({ a, b, p }) => (a !== f && b !== f) || pos[a] === null || pos[b] === null || holdsPair(l, p, pos[a]!, pos[b]!));
   const go = (k: number) => {
     if (out.length >= limit) return;
     if (k === order.length) {
-      out.push(pos.slice());
+      out.push(pos.slice() as Cell[]);
       return;
     }
     const f = order[k];
@@ -121,7 +229,8 @@ export function allSolutions(l: Layout, clues: Clue[], limit = 2): Cell[][] {
       if (rows[r] || cols[c]) continue;
       rows[r] = cols[c] = true;
       pos[f] = cell;
-      go(k + 1);
+      if (pairOk(f)) go(k + 1);
+      pos[f] = null;
       rows[r] = cols[c] = false;
     }
   };
@@ -129,91 +238,153 @@ export function allSolutions(l: Layout, clues: Clue[], limit = 2): Cell[][] {
   return out;
 }
 
-export type Step = { figure: number; cell: Cell; why: "only" | "row" | "col" };
+export type Why =
+  | { k: "only"; f: number; cell?: Cell }
+  | { k: "lineOnly"; f: number; axis: "row" | "col"; line: number }
+  | { k: "point"; f: number; axis: "row" | "col"; line: number }
+  | { k: "pair"; f: number; g: number; axis: "row" | "col"; lines: number[] }
+  | { k: "rel"; f: number; g: number; p: Pred };
+
+export type Step = { place?: { f: number; cell: Cell }; why: Why; removed: { f: number; cell: Cell }[] };
 
 /**
- * Решатель «за обедом»: только приёмы, которые человек делает в уме.
- * — У фигуры осталась одна клетка — ставим.
- * — Все клетки фигуры в одной строке (столбце) — эту строку (столбец) другим нельзя.
- * — В строке (столбце) может стоять только одна фигура — она там.
- * Возвращает порядок, в котором фигуры становятся на места, или null, если без перебора не решить.
+ * Решатель «за обедом»: только приёмы, которые человек делает в уме (те же, что в разделе «Приёмы»).
+ * Возвращает шаги с объяснениями (для подсказок) или null, если без перебора не решить.
  */
 export function logicSolve(l: Layout, clues: Clue[]): { steps: Step[]; rounds: number } | null {
   const n = l.n;
-  const cand = clues.map((c) => new Set(candidates(l, c)));
-  const placed = new Array(clues.length).fill(false);
+  const { N, okUnary, pairs } = compile(l, clues);
+  const cand: Set<Cell>[] = Array.from({ length: N }, (_, f) => {
+    const s = new Set<Cell>();
+    for (let i = 0; i < n * n; i++) if (okUnary(f, i)) s.add(i);
+    return s;
+  });
+  const placed = new Array(N).fill(false);
   const steps: Step[] = [];
-  let rounds = 0;
-  let changed = true;
   const rowOf = (c: Cell) => Math.floor(c / n);
   const colOf = (c: Cell) => c % n;
+  let rounds = 0;
+  const record = (why: Why, removed: { f: number; cell: Cell }[]) => {
+    if (!removed.length) return false;
+    steps.push({ why, removed });
+    return true;
+  };
+  const placeIfSingle = (why: Why) => {
+    let any = false;
+    for (let f = 0; f < N; f++) {
+      if (!placed[f] && cand[f].size === 1) {
+        placed[f] = true;
+        steps.push({ place: { f, cell: [...cand[f]][0] }, why: why.f === f ? why : { k: "only", f }, removed: [] });
+        any = true;
+      }
+    }
+    return any;
+  };
+  let changed = true;
   while (changed) {
     changed = false;
     rounds++;
-    for (let f = 0; f < cand.length; f++) {
-      if (cand[f].size === 0) return null;
-      const cells = [...cand[f]];
-      const rs = new Set(cells.map(rowOf));
-      const cs = new Set(cells.map(colOf));
-      if (rs.size === 1 || cs.size === 1) {
-        for (let g = 0; g < cand.length; g++) {
+    if (rounds > 200) return null;
+    if (cand.some((s) => s.size === 0)) return null;
+    // 1. Поставленная фигура закрывает свою строку и столбец; фигура, чьи клетки в одной линии, — тоже
+    for (let f = 0; f < N && !changed; f++) {
+      for (const axis of ["row", "col"] as const) {
+        const of = axis === "row" ? rowOf : colOf;
+        const lines = new Set([...cand[f]].map(of));
+        if (lines.size !== 1) continue;
+        const line = [...lines][0];
+        const removed: { f: number; cell: Cell }[] = [];
+        for (let g = 0; g < N; g++) {
           if (g === f) continue;
-          for (const x of [...cand[g]]) {
-            if ((rs.size === 1 && rs.has(rowOf(x))) || (cs.size === 1 && cs.has(colOf(x)))) {
-              cand[g].delete(x);
-              changed = true;
-            }
+          for (const x of [...cand[g]]) if (of(x) === line) {
+            cand[g].delete(x);
+            removed.push({ f: g, cell: x });
           }
         }
-      }
-      if (cells.length === 1 && !placed[f]) {
-        placed[f] = true;
-        steps.push({ figure: f, cell: cells[0], why: "only" });
-        changed = true;
-      }
-    }
-    // Пара: две фигуры делят одни и те же две строки (столбца) — остальным туда нельзя.
-    for (const of of [rowOf, colOf]) {
-      for (let a = 0; a < cand.length; a++) {
-        const sa = new Set([...cand[a]].map(of));
-        if (sa.size !== 2) continue;
-        for (let b = a + 1; b < cand.length; b++) {
-          const sb = new Set([...cand[b]].map(of));
-          if (sb.size > 2 || ![...sb].every((x) => sa.has(x))) continue;
-          for (let g = 0; g < cand.length; g++) {
-            if (g === a || g === b) continue;
-            for (const x of [...cand[g]]) {
-              if (sa.has(of(x))) {
-                cand[g].delete(x);
-                changed = true;
-              }
-            }
-          }
+        if (record(cand[f].size === 1 ? { k: "only", f, cell: [...cand[f]][0] } : { k: "point", f, axis, line }, removed)) {
+          changed = true;
+          break;
         }
       }
     }
+    if (changed) {
+      placeIfSingle({ k: "only", f: -1 });
+      continue;
+    }
+    // 2. В строке (столбце) может встать только одна фигура — она там
     for (const axis of ["row", "col"] as const) {
       const of = axis === "row" ? rowOf : colOf;
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i < n && !changed; i++) {
         const who = cand.map((s, f) => ([...s].some((x) => of(x) === i) ? f : -1)).filter((f) => f >= 0);
         if (who.length === 0) return null;
         if (who.length === 1) {
           const f = who[0];
-          for (const x of [...cand[f]]) {
-            if (of(x) !== i) {
-              cand[f].delete(x);
-              changed = true;
-            }
+          const removed: { f: number; cell: Cell }[] = [];
+          for (const x of [...cand[f]]) if (of(x) !== i) {
+            cand[f].delete(x);
+            removed.push({ f, cell: x });
           }
-          if (cand[f].size === 1 && !placed[f]) {
-            placed[f] = true;
-            steps.push({ figure: f, cell: [...cand[f]][0], why: axis });
+          if (record({ k: "lineOnly", f, axis, line: i }, removed)) {
+            changed = true;
+            placeIfSingle({ k: "lineOnly", f, axis, line: i });
           }
         }
       }
+      if (changed) break;
+    }
+    if (changed) continue;
+    // 3. Парные улики: вычёркиваем клетки, где связь невозможна
+    for (const { a, b, p } of pairs) {
+      const removed: { f: number; cell: Cell }[] = [];
+      for (const x of [...cand[a]]) {
+        const ok = [...cand[b]].some((y) => rowOf(x) !== rowOf(y) && colOf(x) !== colOf(y) && holdsPair(l, p, x, y));
+        if (!ok) {
+          cand[a].delete(x);
+          removed.push({ f: a, cell: x });
+        }
+      }
+      for (const y of [...cand[b]]) {
+        const ok = [...cand[a]].some((x) => rowOf(x) !== rowOf(y) && colOf(x) !== colOf(y) && holdsPair(l, p, x, y));
+        if (!ok) {
+          cand[b].delete(y);
+          removed.push({ f: b, cell: y });
+        }
+      }
+      if (record({ k: "rel", f: a, g: b, p }, removed)) {
+        changed = true;
+        placeIfSingle({ k: "rel", f: a, g: b, p });
+        break;
+      }
+    }
+    if (changed) continue;
+    // 4. Две фигуры делят одни и те же две строки (столбца) — остальным туда нельзя
+    for (const axis of ["row", "col"] as const) {
+      const of = axis === "row" ? rowOf : colOf;
+      for (let a = 0; a < N && !changed; a++) {
+        const sa = new Set([...cand[a]].map(of));
+        if (sa.size !== 2) continue;
+        for (let b = a + 1; b < N && !changed; b++) {
+          const sb = new Set([...cand[b]].map(of));
+          if (sb.size > 2 || ![...sb].every((x) => sa.has(x))) continue;
+          const removed: { f: number; cell: Cell }[] = [];
+          for (let g = 0; g < N; g++) {
+            if (g === a || g === b) continue;
+            for (const x of [...cand[g]]) if (sa.has(of(x))) {
+              cand[g].delete(x);
+              removed.push({ f: g, cell: x });
+            }
+          }
+          if (record({ k: "pair", f: a, g: b, axis, lines: [...sa] }, removed)) {
+            changed = true;
+            placeIfSingle({ k: "only", f: -1 });
+          }
+        }
+      }
+      if (changed) break;
     }
   }
   if (cand.some((s) => s.size !== 1)) return null;
+  placeIfSingle({ k: "only", f: -1 });
   return { steps, rounds };
 }
 
@@ -225,7 +396,7 @@ export function culpritOf(l: Layout, figures: Figure[], pos: Cell[]): number {
   return inZone.length === 1 ? inZone[0] : -1;
 }
 
-// ---------- Текст улик ----------
+// ---------- Текст улик (с <b> для ключевых слов, как на карточках murdoku) ----------
 
 const VERB: Record<Posture, Record<Gender, string>> = {
   sit: { m: "сидел", f: "сидела" },
@@ -233,40 +404,166 @@ const VERB: Record<Posture, Record<Gender, string>> = {
   lie: { m: "лежал", f: "лежала" },
 };
 const WAS: Record<Gender, string> = { m: "был", f: "была" };
-const NOT_WAS: Record<Gender, string> = { m: "не был", f: "не была" };
+const PRON = (f: Figure) => (f.item ? (f.gender === "f" ? "Она" : "Он") : f.gender === "f" ? "Она" : "Он");
+const ORD = ["первом", "втором", "третьем", "четвёртом", "пятом", "шестом", "седьмом", "восьмом"];
+const b = (s: string) => `<b>${s}</b>`;
 
-function frag(l: Layout, p: Pred, g: Gender): string {
+function unaryFrag(l: Layout, p: Pred): string {
   const kind = (ch: string) => l.kinds.find((k) => k.ch === ch)!;
   const zone = (ch: string) => l.zones.find((z) => z.ch === ch)!;
   switch (p.t) {
     case "on":
-      return kind(p.k).on!;
-    case "adj":
-      return kind(p.k).near;
-    case "notAdj":
-      return `не ${kind(p.k).near}`;
+      return b(kind(p.k).on!);
+    case "beside":
+      return b(kind(p.k).near);
+    case "notBeside":
+      return `не ${b(kind(p.k).near)}`;
     case "zone":
-      return zone(p.z).in;
-    case "notZone":
-      return `${NOT_WAS[g]} ${zone(p.z).in}`;
+      return b(zone(p.z).in);
     case "window":
-      return "у окна";
-    case "notWindow":
-      return "не у окна";
+      return b("у окна");
+    case "col":
+      return `в ${b(ORD[p.i] + " столбце")}`;
+    case "row":
+      return `в ${b("ряду " + ROWS[p.i])}`;
+    case "corner":
+      return `в ${b("углу")} зоны`;
+    default:
+      return "";
+  }
+}
+const order = (p: Pred) => ({ on: 0, window: 1, beside: 2, zone: 3, corner: 4, col: 5, row: 6 } as Record<string, number>)[p.t] ?? 9;
+
+/** «Ника сидела на нижней полке у окна. Она была севернее Тимура.» — HTML с <b>. */
+export function clueHtml(l: Layout, figs: Figure[], fi: number, clue: Clue): string {
+  const fig = figs[fi];
+  const g = fig.gender;
+  const out: string[] = [];
+  const kind = (ch: string) => l.kinds.find((k) => k.ch === ch)!;
+  const zone = (ch: string) => l.zones.find((z) => z.ch === ch)!;
+  const pos = clue.filter((p) => ["on", "beside", "zone", "window", "col", "row", "corner", "notBeside"].includes(p.t)).sort((a, c) => order(a) - order(c));
+  const onP = pos.find((p) => p.t === "on") as { t: "on"; k: string } | undefined;
+  const verb = fig.item ? VERB.lie[g] : onP ? VERB[kind(onP.k).posture][g] : WAS[g];
+  let subject = fig.name;
+  if (pos.length) {
+    out.push(`${subject} ${verb} ${pos.map((p) => unaryFrag(l, p)).join(" ")}.`);
+    subject = PRON(fig);
+  }
+  for (const p of clue) {
+    const was = fig.item ? VERB.lie[g] : WAS[g];
+    const other = "j" in p ? figs[p.j] : null;
+    let s = "";
+    switch (p.t) {
+      case "notZone":
+        s = `${subject} ${fig.item ? "не " + VERB.lie[g] : "не " + WAS[g]} ${b(zone(p.z).in)}.`;
+        break;
+      case "notWindow":
+        s = fig.item ? `${subject} ${VERB.lie[g]} ${b("не у окна")}.` : `${subject} ${g === "f" ? "держалась" : "держался"} ${b("подальше от окон")}.`;
+        break;
+      case "north":
+        s = `${subject} ${was} ${b("севернее")} ${other!.gen}.`;
+        break;
+      case "south":
+        s = `${subject} ${was} ${b("южнее")} ${other!.gen}.`;
+        break;
+      case "west":
+        s = `${subject} ${was} ${b("западнее")} ${other!.gen}.`;
+        break;
+      case "east":
+        s = `${subject} ${was} ${b("восточнее")} ${other!.gen}.`;
+        break;
+      case "rowNorth":
+        s = `${subject} ${was} ${b("ровно на ряд севернее")} ${other!.gen}.`;
+        break;
+      case "with":
+        s = `${subject} ${was} ${b("в одной зоне")} с ${other!.ins}.`;
+        break;
+      case "notWith":
+        s = `${subject} ${b("не " + was)} в одной зоне с ${other!.ins}.`;
+        break;
+      case "alone":
+        s = `${subject} ${was} ${b(g === "f" ? "одна" : "один")} в своей зоне.`;
+        break;
+      case "onlyOn":
+        s = `${subject} ${was} ${b(g === "f" ? "единственной" : "единственным")}, кто ${VERB[kind(p.k).posture].m} ${b(kind(p.k).on!)}.`;
+        break;
+      default:
+        continue;
+    }
+    out.push(s);
+    subject = PRON(fig);
+  }
+  return out.join(" ");
+}
+
+export const clueText = (l: Layout, figs: Figure[], fi: number, clue: Clue) => clueHtml(l, figs, fi, clue).replace(/<\/?b>/g, "");
+
+const low = (f: Figure) => (f.item ? f.name[0].toLowerCase() + f.name.slice(1) : f.name);
+const relWord = (p: Pred) =>
+  p.t === "north" ? "севернее" : p.t === "south" ? "южнее" : p.t === "west" ? "западнее" : p.t === "east" ? "восточнее" : p.t === "rowNorth" ? "ровно на ряд севернее" : p.t === "with" ? "в одной зоне с" : "не в одной зоне с";
+
+/** Одно предложение-рассуждение по шагу решателя (без вывода). */
+export function hintText(l: Layout, figs: Figure[], st: Step): string {
+  const lineName = (axis: "row" | "col", i: number) => (axis === "row" ? `ряду ${ROWS[i]}` : `столбце ${i + 1}`);
+  const w = st.why;
+  switch (w.k) {
+    case "only":
+      return w.cell !== undefined
+        ? `${figs[w.f].name} — на ${cellName(l.n, w.cell)}, поэтому ряд ${ROWS[Math.floor(w.cell / l.n)]} и столбец ${(w.cell % l.n) + 1} заняты.`
+        : `У ${figs[w.f].gen} осталась одна подходящая клетка.`;
+    case "point":
+      return `По улике ${figs[w.f].name.toLowerCase() === figs[w.f].name ? low(figs[w.f]) : figs[w.f].gen} подходят только клетки в ${lineName(w.axis, w.line)} — остальным в ${lineName(w.axis, w.line)} места нет.`;
+    case "lineOnly":
+      return `В ${lineName(w.axis, w.line)} кто-то обязательно стоит, а подходит туда только ${low(figs[w.f])}.`;
+    case "pair":
+      return `${figs[w.f].name} и ${low(figs[w.g])} делят ${w.axis === "row" ? "ряды" : "столбцы"} ${w.lines.map((i) => (w.axis === "row" ? ROWS[i] : i + 1)).join(" и ")} — остальным туда нельзя.`;
+    case "rel": {
+      const p = w.p;
+      if (p.t === "alone") return `${figs[w.f].name} ${figs[w.f].gender === "f" ? "была одна" : "был один"} в своей зоне — значит, там больше никого нет.`;
+      const other = p.t === "with" || p.t === "notWith" ? figs[w.g].ins : figs[w.g].gen;
+      return `${figs[w.f].name} ${relWord(p)} ${other} — вычёркиваем клетки, где так не получается.`;
+    }
   }
 }
 
-/** «Ника сидела на нижней полке у окна.» */
-export function clueText(l: Layout, fig: Figure, clue: Clue): string {
-  const g = fig.gender;
-  if (clue.length === 1 && clue[0].t === "notWindow")
-    return `${fig.name} ${fig.item ? VERB.lie[g] : g === "f" ? "держалась" : "держался"} подальше от окон.`;
-  const onPred = clue.find((p) => p.t === "on") as { t: "on"; k: string } | undefined;
-  const neg = clue.find((p) => p.t === "notZone");
-  if (neg && clue.length === 1) return `${fig.name} ${frag(l, neg, g)}.`;
-  const posture: Posture | null = fig.item ? "lie" : onPred ? l.kinds.find((k) => k.ch === onPred.k)!.posture : null;
-  const verb = posture ? VERB[posture][g] : WAS[g];
-  const parts = [...clue].sort((a, b) => order(a) - order(b)).map((p) => frag(l, p, g));
-  return `${fig.name} ${verb} ${parts.join(" ")}.`;
+export type Hint = { text: string; place: { f: number; cell: Cell }; crossed: Cell[]; line?: { axis: "row" | "col"; i: number } };
+
+/**
+ * Подсказки как на murdoku.com: «Подсказка 2/6» — рассуждение, которое ведёт к очередной фигуре.
+ * Шаги решателя между двумя расстановками склеиваются в одно объяснение.
+ */
+export function hints(l: Layout, figs: Figure[], clues: Clue[]): Hint[] {
+  const solved = logicSolve(l, clues);
+  if (!solved) return [];
+  const out: Hint[] = [];
+  let reasons: string[] = [];
+  let crossed: Cell[] = [];
+  let line: Hint["line"];
+  for (const st of solved.steps) {
+    if (!st.place) {
+      const t = hintText(l, figs, st);
+      // «ряд и столбец заняты» — самое очевидное; оставляем, только если других причин нет
+      if (st.why.k === "only") {
+        if (!reasons.length) reasons.push(t);
+      } else {
+        reasons = reasons.filter((r) => !r.includes(" заняты."));
+        if (!reasons.includes(t)) reasons.push(t);
+      }
+      crossed.push(...st.removed.map((r) => r.cell));
+      const w = st.why;
+      if (w.k === "point" || w.k === "lineOnly") line = { axis: w.axis, i: w.line };
+      continue;
+    }
+    const { f, cell } = st.place;
+    const who = figs[f];
+    let text: string;
+    if (st.why.k === "lineOnly") text = `${hintText(l, figs, st)} Значит, ${low(who)} — на клетке ${cellName(l.n, cell)}.`;
+    else if (!reasons.length) text = `${clueText(l, figs, f, clues[f])} Под это подходит только клетка ${cellName(l.n, cell)}.`;
+    else text = `${reasons.slice(-2).join(" ")} Значит, ${low(who)} — на клетке ${cellName(l.n, cell)}.`;
+    out.push({ text, place: { f, cell }, crossed: [...new Set(crossed)], line });
+    reasons = [];
+    crossed = [];
+    line = undefined;
+  }
+  return out;
 }
-const order = (p: Pred) => ({ on: 0, window: 1, notWindow: 1, adj: 2, notAdj: 3, zone: 4, notZone: 5 })[p.t];

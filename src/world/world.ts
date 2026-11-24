@@ -5,7 +5,8 @@ import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
-import { makeMountains, makeSky } from "./sky";
+import { makeSky } from "./sky";
+import { makeHorizon } from "./horizon";
 import { CLEAR, makeScenery } from "./scenery";
 import { makeJourney, STOPS } from "./landmarks";
 import { makeTrain } from "./train";
@@ -54,7 +55,7 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
   scene.add(new THREE.AmbientLight("#2a3d6b", 0.35));
 
   const sky = makeSky(scene);
-  const mountains = makeMountains(scene);
+  const mountains = makeHorizon(scene, tier);
   const scenery = makeScenery(scene, [700, 1200, 1700][tier]);
   const journey = makeJourney(scene, scenery.glow, scenery.lightMat, CLEAR);
   const train = makeTrain(scene);

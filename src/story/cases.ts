@@ -14,11 +14,12 @@ export type CaseDef = {
   layout: Layout;
   suspects: string[]; // id героев
   culprit: string;
-  item: { name: string; gender: Gender; icon: string };
+  item: { name: string; gender: Gender; icon: string; gen: string; ins: string };
   reveal: string[];
   evidence: string; // что уходит в блокнот
   allow: Pred["t"][]; // какие улики разрешены генератору
   pairs: boolean; // разрешены ли улики из двух условий
+  maxRel: number; // сколько улик про других персонажей («севернее Тимура», «одна в зоне»)
 };
 
 const ROZETKA = { ch: "O", name: "Розетка", icon: "🔌", posture: "stand" as const, on: "у розетки", near: "рядом с розеткой" };
@@ -58,15 +59,16 @@ export const CASES: CaseDef[] = [
     },
     suspects: ["timur", "nika", "gleb", "sonya"],
     culprit: "timur",
-    item: { name: "Штекер", gender: "m", icon: "🔗" },
+    item: { name: "Штекер", gender: "m", icon: "🔗", gen: "штекера", ins: "штекером" },
     reveal: [
       "Тимур. Девопс, который «просто проверял нагрузку».",
       "Он выдернул кабель нарочно: на том же сервере крутился секретный тестовый стенд, и мониторинг вот-вот показал бы его всему поезду.",
       "В кармане у Тимура записка: «Ни слова до 23:59. Передай зарядку Асе». Какую ещё зарядку?",
     ],
     evidence: "Записка «Ни слова до 23:59»",
-    allow: ["on", "adj", "zone"],
+    allow: ["on", "beside", "zone", "col", "row"],
     pairs: false,
+    maxRel: 1,
   },
   {
     id: "platzkart",
@@ -106,15 +108,16 @@ export const CASES: CaseDef[] = [
     },
     suspects: ["asya", "lev", "eva", "mark", "vera"],
     culprit: "asya",
-    item: { name: "Зарядка", gender: "f", icon: "🔋" },
+    item: { name: "Зарядка", gender: "f", icon: "🔋", gen: "зарядки", ins: "зарядкой" },
     reveal: [
       "Ася. Дизайнер, у которой ноутбук в стикерах и всегда 100% заряда. Подозрительно.",
       "Всю ночь зарядка питала её ноутбук: Ася рисовала что-то огромное, зелёное и мигающее. Макет она закрыла раньше, чем мы успели разглядеть.",
       "На последнем экране макета подпись: «Финальный апрув — у Марка, купе 2».",
     ],
     evidence: "Стикер с краешком зелёного макета",
-    allow: ["on", "adj", "zone", "window", "notWindow"],
+    allow: ["on", "beside", "zone", "window", "notWindow", "col", "row", "corner"],
     pairs: true,
+    maxRel: 2,
   },
   {
     id: "kupe",
@@ -153,15 +156,16 @@ export const CASES: CaseDef[] = [
     },
     suspects: ["mark", "nika", "gleb", "sonya", "kesha"],
     culprit: "mark",
-    item: { name: "Кружка «LGTM»", gender: "f", icon: "☕" },
+    item: { name: "Кружка «LGTM»", gender: "f", icon: "☕", gen: "кружки «LGTM»", ins: "кружкой «LGTM»" },
     reveal: [
       "Марк. Тимлид, у которого нет свободных слотов, нашёл слот на апрув в 03:12.",
       "Он не глядел в код, потому что уже видел его: весь поезд неделю писал одну и ту же секретную фичу. Кнопка на Луну — отвлекающий манёвр, её откатили за минуту.",
       "Под кружкой схема с часовыми поясами и пометкой Евы: «таймер проверить в ресторане».",
     ],
     evidence: "Схема часовых поясов с пометкой Евы",
-    allow: ["on", "adj", "zone", "window", "notWindow", "notZone"],
+    allow: ["on", "beside", "zone", "window", "notWindow", "notZone", "col", "row", "corner"],
     pairs: true,
+    maxRel: 3,
   },
   {
     id: "restaurant",
@@ -199,15 +203,16 @@ export const CASES: CaseDef[] = [
     },
     suspects: ["eva", "timur", "asya", "lev", "vera"],
     culprit: "eva",
-    item: { name: "Салфетка с расписанием", gender: "f", icon: "🧻" },
+    item: { name: "Салфетка", gender: "f", icon: "🧻", gen: "салфетки", ins: "салфеткой" },
     reveal: [
       "Ева. Аналитик, у которой есть дашборд даже на этот поезд.",
       "Она проверяла новогодний таймер секретной фичи и забыла, что сервер считает время в UTC, а поезд уже в другом поясе. Рассылка просто проверка, честно.",
       "На салфетке в углу: «Таймер готов. Кнопку жмёт Лев. Локомотив, 23:59».",
     ],
     evidence: "Салфетка «Кнопку жмёт Лев»",
-    allow: ["on", "adj", "zone", "window", "notWindow", "notZone", "notAdj"],
+    allow: ["on", "beside", "zone", "window", "notWindow", "notZone", "notBeside", "col", "row", "corner"],
     pairs: true,
+    maxRel: 3,
   },
   {
     id: "locomotive",
@@ -247,14 +252,15 @@ export const CASES: CaseDef[] = [
     },
     suspects: ["lev", "timur", "asya", "mark", "eva", "sonya"],
     culprit: "lev",
-    item: { name: "Ноутбук с кнопкой Deploy", gender: "m", icon: "💻" },
+    item: { name: "Ноутбук", gender: "m", icon: "💻", gen: "ноутбука", ins: "ноутбуком" },
     reveal: [
       "Лев. Стажёр, который всё делает впервые. Первый деплой в жизни, и сразу в 23:59 тридцать первого.",
       "Но он был не один. Тимур прятал стенд, Ася рисовала, Марк апрувнул, Ева проверила таймер. Весь поезд неделю готовил одну фичу.",
       "Лев жмёт Enter. 00:00. Прямо на карте, в мраморном каньоне Рускеалы, вырастает огромная ёлка.",
     ],
     evidence: "Ёлка на карте",
-    allow: ["on", "adj", "zone", "window", "notWindow", "notZone", "notAdj"],
+    allow: ["on", "beside", "zone", "window", "notWindow", "notZone", "notBeside", "col", "row", "corner"],
     pairs: true,
+    maxRel: 4,
   },
 ];

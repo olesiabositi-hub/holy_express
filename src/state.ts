@@ -7,6 +7,9 @@ export type Save = {
   solved: Record<string, { at: number; ms: number; hints: number }>;
   board: Record<string, (Cell | null)[]>;
   marks: Record<string, Cell[]>;
+  notes: Record<string, Record<string, number[]>>; // клетка → фигуры-заметки
+  hintAt: Record<string, number>; // до какой подсказки дошёл
+  tutorialSeen: boolean;
   ms: Record<string, number>;
   hints: Record<string, number>;
   santa: number;
@@ -16,7 +19,7 @@ export type Save = {
 
 const KEY = "kodfriz-express-v1";
 
-const fresh = (): Save => ({ v: 1, solved: {}, board: {}, marks: {}, ms: {}, hints: {}, santa: 0, introSeen: false, finaleSeen: false });
+const fresh = (): Save => ({ v: 1, solved: {}, board: {}, marks: {}, notes: {}, hintAt: {}, tutorialSeen: false, ms: {}, hints: {}, santa: 0, introSeen: false, finaleSeen: false });
 
 export function load(): Save {
   try {

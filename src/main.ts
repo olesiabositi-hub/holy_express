@@ -3,6 +3,7 @@ import "@fontsource/golos-text/600.css";
 import "@fontsource/golos-text/700.css";
 import "@fontsource/golos-text/800.css";
 import "./styles.css";
+import "./ui/case.css";
 import { createWorld } from "./world/world";
 import { createHub } from "./ui/hub";
 import { load } from "./state";

@@ -3,6 +3,7 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { snowTex, softDot } from "./tex";
+import { graniteCliff } from "./horizon";
 import { animateCrowd, festiveStation, lights, swag, treeSpiral, twinkleMaterial, type Crowd } from "./festive";
 
 export const STRIP = 640;
@@ -143,10 +144,10 @@ export function makeStrip(trees: number, seed: number, shared: Shared, withFesti
 
   // Земля
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(L, 520).rotateX(-Math.PI / 2),
+    new THREE.PlaneGeometry(L, 1600).rotateX(-Math.PI / 2),
     new THREE.MeshStandardMaterial({ color: "#dbe5f3", map: shared.snow, roughness: 0.92 }),
   );
-  (ground.material as THREE.MeshStandardMaterial).map!.repeat.set(L / 40, 520 / 40);
+  (ground.material as THREE.MeshStandardMaterial).map!.repeat.set(L / 40, 1600 / 40);
   group.add(ground);
 
   // Насыпь, шпалы, рельсы
@@ -256,6 +257,19 @@ export function makeStrip(trees: number, seed: number, shared: Shared, withFesti
       group.add(wire);
     }
 
+  // Гранитные скалы с соснами — Карелия
+  const cliffs: { x: number; z: number; r: number }[] = [];
+  for (let i = 0; i < 8; i++) {
+    const x = -L / 2 + 30 + rnd() * (L - 60);
+    const side = rnd() < 0.6 ? -1 : 1;
+    const z = side * (55 + rnd() * 120);
+    const size = 7 + rnd() * 9;
+    const c = graniteCliff(rnd, size);
+    c.position.set(x, 0, z);
+    prop(x - size * 1.3, x + size * 1.3, z - size, z + size).add(c);
+    cliffs.push({ x, z, r: size * 1.2 });
+  }
+
   // Лес
   const inst = new THREE.InstancedMesh(shared.spruce, shared.treeMat, trees);
   const q = new THREE.Quaternion();
@@ -274,6 +288,7 @@ export function makeStrip(trees: number, seed: number, shared: Shared, withFesti
     if (Math.hypot(x - village.x, z - village.z) < village.r + 6) continue;
     if (Math.abs(x - st.x) < 30 && z > 0 && z < 22) continue;
     if (Math.abs(z + 6.5) < 2.5) continue; // столбы
+    if (cliffs.some((c) => Math.hypot(x - c.x, z - c.z) < c.r)) continue;
     // ближний к зрителю край — снежная поляна: виден поезд, по ней бегут олени
     if (z > 8 && z < 30 && rnd() < 0.8) continue;
     if (Math.abs(x - fest.x) < 34 && z < 0 && z > -26) continue; // полустанок

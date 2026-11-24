@@ -1,7 +1,8 @@
 // Интерфейс поверх мира: шапка, плашки вагонов, лента вагонов, мини-карта, модалки.
 import { CASES } from "../story/cases";
 import { fmtTime, isOpen, PREVIEW, resetAll, save, type Save } from "../state";
-import { openCase } from "./casePanel";
+import { openCase } from "./caseScene";
+import { ticketSvg } from "./ticket";
 import { STOPS as ROUTE_STOPS } from "../world/landmarks";
 import { setSound, soundOn, unlockAudio } from "../audio";
 
@@ -46,10 +47,12 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
     <div class="spacer"></div>${PREVIEW ? `<span class="preview-badge hide-sm">Предпросмотр: все вагоны открыты</span>` : ""}
     <span class="progress-pill"><span class="hide-sm">Раскрыто </span><b class="pc">0</b><span class="hide-sm"> из 5</span><span class="show-sm">/5</span></span>
     <button class="icon-btn" data-a="sound" aria-label="Звук"></button>
+    <button class="icon-btn" data-a="ticket">🎟️<span class="hide-sm"> Билет</span></button>
     <button class="icon-btn" data-a="notes">🗒️<span class="hide-sm"> Блокнот</span></button>
     <button class="icon-btn" data-a="rules">❔<span class="hide-sm"> Правила</span></button>`;
   root.appendChild(top);
   top.querySelector<HTMLButtonElement>('[data-a="notes"]')!.onclick = () => showNotes();
+  top.querySelector<HTMLButtonElement>('[data-a="ticket"]')!.onclick = () => showTicket();
   top.querySelector<HTMLButtonElement>('[data-a="rules"]')!.onclick = () => showRules();
   const soundBtn = top.querySelector<HTMLButtonElement>('[data-a="sound"]')!;
   const paintSound = () => (soundBtn.textContent = soundOn() ? "🔊" : "🔇");
@@ -255,14 +258,24 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
     };
   }
 
+  function showTicket() {
+    const have = CASES.map((c) => !!S.solved[c.id]);
+    const n = have.filter(Boolean).length;
+    modal(`<h2>Билет на Код-фриз экспресс</h2>
+      <p class="lead" style="font-size:16px">${n === 5 ? "Билет собран! Подарочный код — на нём." : `Собрано частей: ${n} из 5. Каждое раскрытое дело — ещё одна часть билета. Соберёшь все — в финале на билете появится код с подарком.`}</p>
+      <div class="ticket-wrap">${ticketSvg(have, null)}</div>
+      <div class="row"><button class="btn primary" data-close>Понятно</button></div>`);
+  }
+
   function showRules() {
     modal(`<h2>Как раскрыть дело</h2>
-      <div class="rule"><span class="n">1</span><span>Каждое дело — план вагона, разбитый на клетки и цветные зоны: купе, проход, кухня.</span></div>
+      <div class="rule"><span class="n">1</span><span>Каждый день открывается новый вагон. Внутри — дело: план вагона, разбитый на клетки и зоны (купе, проход, кухня).</span></div>
       <div class="rule"><span class="n">2</span><span>Расставь всех подозреваемых и улику. <b>В каждой строке и в каждом столбце — ровно один.</b></span></div>
       <div class="rule"><span class="n">3</span><span>На занятые клетки (со штриховкой: стол, стеллаж, плита) встать нельзя. На стул или полку — можно.</span></div>
-      <div class="rule"><span class="n">4</span><span>У каждого есть показание: где он был. «У окна» — значит в верхнем или нижнем ряду, вдоль окон. «Рядом с» — в соседней клетке слева, справа, сверху или снизу.</span></div>
+      <div class="rule"><span class="n">4</span><span>У каждого есть показание: где он был. «Рядом с» — соседняя клетка слева, справа, сверху или снизу в той же зоне. «Севернее» — выше по плану.</span></div>
       <div class="rule"><span class="n">5</span><span><b>Виновный — единственный подозреваемый в одной зоне с уликой.</b></span></div>
-      <p class="lead" style="font-size:15px">У каждого дела ровно одно решение, и его можно найти логикой, без угадывания. Застрял — бери подсказку. Прогресс сохраняется в этом браузере.</p>
+      <div class="rule"><span class="n">6</span><span>Каждое раскрытое дело — часть билета. Собери все пять, и в финале на билете появится код с подарком.</span></div>
+      <p class="lead" style="font-size:15px">Короткое нажатие на клетку — заметка, нажать и подержать — поставить персонажа. Подробная справка — кнопка «Как играть» внутри вагона. У каждого дела одно решение, его можно найти логикой. Прогресс сохраняется в этом браузере.</p>
       <div class="row"><button class="btn primary" data-close>Понятно</button></div>`);
   }
 
@@ -306,7 +319,8 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
         <div class="tiles"><div class="tile g"><div class="v">${fmtTime(total)}</div><div class="l">на все расследования</div></div>
           <div class="tile y"><div class="v">${hints}</div><div class="l">подсказок</div></div>
           <div class="tile"><div class="v">${S.santa}</div><div class="l">раз пойман Санта</div></div></div>
-        <div class="gift"><b>Твой подарок</b><div>Здесь появится твой личный подарочный код.</div><div class="code">СКОРО</div></div>
+        <p class="lead" style="font-size:16px;margin:14px 0 8px">Билет собран из пяти частей. Код с подарком — на нём.</p>
+        <div class="ticket-wrap">${ticketSvg(CASES.map(() => true), "СКОРО")}</div>
         <div class="row"><button class="btn primary" data-close>Полюбоваться ёлкой</button></div>`,
         () => {
           setTimeout(() => {
