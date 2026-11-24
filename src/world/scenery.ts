@@ -107,8 +107,24 @@ export function gisPin() {
   return g;
 }
 
-export type Strip = { group: THREE.Group; pins: THREE.Object3D[]; festive?: { x: number; crowd: Crowd; tree: THREE.Group } };
-type Shared = { spruce: THREE.BufferGeometry; treeMat: THREE.Material; snow: THREE.Texture; glow: THREE.Texture; lightMat: THREE.Material };
+/** Материал инстансов, которые исчезают внутри CLEAR-прямоугольников (лес, столбы). */
+export function clearable<T extends THREE.Material>(m: T): T {
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uClear = CLEAR;
+    sh.vertexShader = CLEAR_GLSL + "\n" + sh.vertexShader.replace(
+      "#include <begin_vertex>",
+      `#include <begin_vertex>
+      #ifdef USE_INSTANCING
+        if (inClear((modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz)) transformed = vec3(0.0);
+      #endif`,
+    );
+  };
+  return m;
+}
+
+type Prop = { obj: THREE.Object3D; x0: number; x1: number; z0: number; z1: number };
+export type Strip = { group: THREE.Group; pins: THREE.Object3D[]; props: Prop[]; festive?: { x: number; crowd: Crowd; tree: THREE.Group; obj: THREE.Object3D } };
+type Shared = { spruce: THREE.BufferGeometry; treeMat: THREE.Material; poleMat: THREE.Material; snow: THREE.Texture; glow: THREE.Texture; lightMat: THREE.Material };
 
 export function makeStrip(trees: number, seed: number, shared: Shared, withFestive: boolean): Strip {
   s = seed;
@@ -116,6 +132,14 @@ export function makeStrip(trees: number, seed: number, shared: Shared, withFesti
   const L = STRIP;
   const pins: THREE.Object3D[] = [];
   const fest = { x: -40 };
+  // Постройки полосы — отдельными группами: когда рядом проезжаем реальное место, они прячутся
+  const props: Prop[] = [];
+  const prop = (x0: number, x1: number, z0: number, z1: number) => {
+    const obj = new THREE.Group();
+    group.add(obj);
+    props.push({ obj, x0, x1, z0, z1 });
+    return obj;
+  };
 
   // Земля
   const ground = new THREE.Mesh(
@@ -148,27 +172,28 @@ export function makeStrip(trees: number, seed: number, shared: Shared, withFesti
   const ice = new THREE.Mesh(new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: "#8fb2dd", roughness: 0.12, metalness: 0.35 }));
   ice.scale.set(lake.rx, 1, lake.rz);
   ice.position.set(lake.x, 0.04, lake.z);
-  group.add(ice);
+  prop(lake.x - lake.rx, lake.x + lake.rx, lake.z - lake.rz, lake.z + lake.rz).add(ice);
 
   // Деревня
   const village = { x: -170, z: 34, r: 30 };
   const warm = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 1.55, 0.7) });
+  const vg = prop(village.x - 36, village.x + 36, village.z - 14, village.z + 34);
   for (let i = 0; i < 9; i++) {
     const h = house(warm);
     h.position.set(village.x + (rnd() - 0.5) * 54, 0, village.z + (rnd() - 0.2) * 34);
     h.rotation.y = (rnd() - 0.5) * 0.6;
-    group.add(h);
+    vg.add(h);
   }
   const vPosts: THREE.Vector3[] = [];
   for (let i = 0; i < 4; i++) {
     const lp = lamp(shared.glow);
     lp.position.set(village.x - 24 + i * 16, 0, village.z - 9);
-    group.add(lp);
+    vg.add(lp);
     vPosts.push(new THREE.Vector3(village.x - 24 + i * 16, 4.0, village.z - 9));
   }
   const vLights: THREE.Vector3[] = [];
   for (let i = 0; i < vPosts.length - 1; i++) vLights.push(...swag(vPosts[i], vPosts[i + 1], 1.2, 0.45));
-  group.add(lights(vLights, shared.lightMat));
+  vg.add(lights(vLights, shared.lightMat));
 
   // праздничный полустанок (только на одной из двух полос, чтобы он встречался реже)
   let festive: Strip["festive"];
@@ -176,55 +201,53 @@ export function makeStrip(trees: number, seed: number, shared: Shared, withFesti
     const warm2 = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 1.55, 0.7) });
     const f = festiveStation(rnd, shared.glow, shared.lightMat, warm2);
     f.group.position.x = fest.x;
-    group.add(f.group);
+    const fg = prop(fest.x - 30, fest.x + 30, -16, -2);
+    fg.add(f.group);
     const pin = gisPin();
     pin.position.set(fest.x + 12, 11, -11);
     pin.scale.setScalar(1.4);
-    group.add(pin);
+    fg.add(pin);
     pins.push(pin);
-    festive = { x: fest.x, crowd: f.crowd, tree: f.tree };
+    festive = { x: fest.x, crowd: f.crowd, tree: f.tree, obj: fg };
   }
 
   // Станция с платформой, фонарями и пином 2ГИС
   const st = { x: 230 };
+  const sgp = prop(st.x - 27, st.x + 27, 2, 18);
   const platform = new THREE.Mesh(new THREE.BoxGeometry(46, 0.9, 4), new THREE.MeshStandardMaterial({ color: "#9097a3", roughness: 0.9 }));
   platform.position.set(st.x, 0.45, 4.6);
-  group.add(platform);
+  sgp.add(platform);
   const pSnow = new THREE.Mesh(new THREE.BoxGeometry(46, 0.08, 4), new THREE.MeshStandardMaterial({ color: "#eef3fb" }));
   pSnow.position.set(st.x, 0.94, 4.6);
-  group.add(pSnow);
+  sgp.add(pSnow);
   const stPosts: THREE.Vector3[] = [];
   for (let i = 0; i < 5; i++) {
     const lp = lamp(shared.glow);
     lp.position.set(st.x - 20 + i * 10, 0.9, 6.1);
-    group.add(lp);
+    sgp.add(lp);
     stPosts.push(new THREE.Vector3(st.x - 20 + i * 10, 4.9, 6.1));
   }
   // гирлянды между фонарями станции
   const stLights: THREE.Vector3[] = [];
   for (let i = 0; i < stPosts.length - 1; i++) stLights.push(...swag(stPosts[i], stPosts[i + 1], 0.9, 0.42));
-  group.add(lights(stLights, shared.lightMat, true));
+  sgp.add(lights(stLights, shared.lightMat, true));
   const station = house(warm);
   station.scale.set(1.8, 1.4, 1.5);
   station.position.set(st.x, 0, 11.5);
-  group.add(station);
+  sgp.add(station);
   const pin = gisPin();
   pin.position.set(st.x, 9.5, 11.5);
   pin.scale.setScalar(1.5);
-  group.add(pin);
+  sgp.add(pin);
   pins.push(pin);
 
   // Столбы с проводами
-  const poleMat = new THREE.MeshStandardMaterial({ color: "#2b2420", roughness: 1 });
-  for (let x = -L / 2; x < L / 2; x += 32) {
-    if (withFestive && Math.abs(x - fest.x) < 34) continue; // у полустанка столбов нет
-    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 7, 6), poleMat);
-    p.position.set(x, 3.5, -6.5);
-    group.add(p);
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 1.6), poleMat);
-    bar.position.set(x, 6.6, -6.5);
-    group.add(bar);
-  }
+  const poleGeo = mergeGeometries([new THREE.CylinderGeometry(0.12, 0.16, 7, 6).translate(0, 3.5, 0), new THREE.BoxGeometry(0.12, 0.12, 1.6).translate(0, 6.6, 0)])!;
+  const poleXs: number[] = [];
+  for (let x = -L / 2; x < L / 2; x += 32) if (!(withFestive && Math.abs(x - fest.x) < 34)) poleXs.push(x); // у полустанка столбов нет
+  const poles = new THREE.InstancedMesh(poleGeo, shared.poleMat, poleXs.length);
+  poleXs.forEach((x, i) => poles.setMatrixAt(i, new THREE.Matrix4().makeTranslation(x, 0, -6.5)));
+  group.add(poles);
   const spans: [number, number][] = withFestive ? [[-L / 2, fest.x - 34], [fest.x + 34, L / 2]] : [[-L / 2, L / 2]];
   for (const [x0, x1] of spans)
     for (const dz of [-0.6, 0.6]) {
@@ -279,18 +302,25 @@ export function makeStrip(trees: number, seed: number, shared: Shared, withFesti
   const sparks = new THREE.Points(sg, new THREE.PointsMaterial({ map: shared.glow, size: 0.35, color: new THREE.Color(1.4, 1.5, 1.8), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   group.add(sparks);
 
-  return { group, pins, festive };
+  return { group, pins, props, festive };
 }
 
+/** Прямоугольники (x0, x1, z0, z1 в мировых координатах), где лес и огоньки не рисуются: там стоят реальные места. */
+export const CLEAR = { value: Array.from({ length: 8 }, () => new THREE.Vector4(1, -1, 0, 0)) };
+export const CLEAR_GLSL = `uniform vec4 uClear[8];
+  bool inClear(vec3 w){ for (int i = 0; i < 8; i++){ vec4 r = uClear[i]; if (w.x > r.x && w.x < r.y && w.z > r.z && w.z < r.w) return true; } return false; }`;
+
 export function makeScenery(scene: THREE.Scene, treesPerStrip: number) {
+  const treeMat = clearable(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true }));
   const shared = {
     spruce: spruceGeometry(),
-    treeMat: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true }),
+    treeMat: treeMat as THREE.Material,
+    poleMat: clearable(new THREE.MeshStandardMaterial({ color: "#2b2420", roughness: 1 })) as THREE.Material,
     snow: snowTex(),
     glow: softDot(),
     lightMat: null as unknown as THREE.ShaderMaterial,
   };
-  shared.lightMat = twinkleMaterial(shared.glow);
+  shared.lightMat = twinkleMaterial(shared.glow, CLEAR, CLEAR_GLSL);
   const a = makeStrip(treesPerStrip, 11, shared, true);
   const b = makeStrip(treesPerStrip, 11, shared, false);
   // полустанок встречается секунд через 20 после старта; ?fest ставит его прямо у поезда (для проверки)
@@ -303,6 +333,7 @@ export function makeScenery(scene: THREE.Scene, treesPerStrip: number) {
   return {
     /** Где сейчас праздничный полустанок (мировой x) — для гудка. */
     festiveX: () => a.group.position.x + a.festive!.x,
+    festiveVisible: () => a.festive!.obj.visible,
     update(dx: number, t: number) {
       shared.lightMat.uniforms.t.value = t;
       const fx = a.group.position.x + a.festive!.x;
@@ -311,6 +342,11 @@ export function makeScenery(scene: THREE.Scene, treesPerStrip: number) {
       for (const st of strips) {
         st.group.position.x -= dx;
         if (st.group.position.x < -STRIP) st.group.position.x += STRIP * 2;
+        // постройки полосы, которые налезают на реальное место, прячем
+        for (const pr of st.props) {
+          const x0 = st.group.position.x + pr.x0, x1 = st.group.position.x + pr.x1;
+          pr.obj.visible = !CLEAR.value.some((r) => r.x < r.y && x1 > r.x && x0 < r.y && pr.z1 > r.z && pr.z0 < r.w);
+        }
         for (const p of st.pins) {
           p.position.y = 9.5 + Math.sin(t * 2) * 0.35;
           p.rotation.y = t * 0.8;
@@ -318,5 +354,6 @@ export function makeScenery(scene: THREE.Scene, treesPerStrip: number) {
       }
     },
     glow: shared.glow,
+    lightMat: shared.lightMat,
   };
 }

@@ -2,6 +2,7 @@
 import { CASES } from "../story/cases";
 import { fmtTime, isOpen, PREVIEW, resetAll, save, type Save } from "../state";
 import { openCase } from "./casePanel";
+import { STOPS as ROUTE_STOPS } from "../world/landmarks";
 import { setSound, soundOn, unlockAudio } from "../audio";
 
 type WorldApi = {
@@ -11,6 +12,7 @@ type WorldApi = {
   unfocus: () => void;
   finale: (onArrive: () => void) => void;
   leaveFinale: () => void;
+  route: () => { p: number; pos: number; from: string; to: string; here: string | null };
   readonly mode: string;
 };
 
@@ -150,7 +152,9 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
     const solved = CASES.map((c) => !!S.solved[c.id]);
     const cur = currentIndex();
     const seg = (i: number) => `M${STATIONS[i].x},${STATIONS[i].y} L${STATIONS[i + 1].x},${STATIONS[i + 1].y}`;
-    map.innerHTML = `<div class="cap"><span>Маршрут</span><b>${STATIONS[cur].name} → ${STATIONS[cur + 1].name}</b></div>
+    void cur;
+    lastWhere = "";
+    map.innerHTML = `<div class="cap"><span>Поезд сейчас</span><b class="where">Петербург</b></div>
     <svg viewBox="0 0 270 200" role="img" aria-label="Карта маршрута поезда">
       <rect width="270" height="200" fill="#1F2329"/>
       <path d="M0,200 L0,176 C20,170 30,188 22,200 Z" fill="#26405f"/>
@@ -162,14 +166,47 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
       ${CASES.map((_, i) => `<path d="${seg(i)}" stroke="${solved[i] ? "#19AA1E" : "#4a4f58"}" stroke-width="${solved[i] ? 5 : 4}" stroke-linecap="round" ${solved[i] ? "" : 'stroke-dasharray="2 6"'}/>`).join("")}
       ${STATIONS.map((s, i) => `<g><circle cx="${s.x}" cy="${s.y}" r="5" fill="#fff"/><circle cx="${s.x}" cy="${s.y}" r="2.4" fill="${i <= cur ? "#19AA1E" : "#6e6e6e"}"/>
         <text x="${s.x + 8}" y="${s.y + 4}" fill="#F2F2F0" font-size="10" font-weight="600" font-family="Golos Text, sans-serif">${s.name}</text></g>`).join("")}
-      <circle r="6.5" fill="#19AA1E" stroke="#fff" stroke-width="2.5">
-        <animateMotion dur="14s" repeatCount="indefinite" path="${seg(cur)}"/>
-      </circle>
+      <circle class="pulse" r="12" fill="#19AA1E" opacity=".35"/>
+      <circle class="train" r="6.5" fill="#19AA1E" stroke="#fff" stroke-width="2.5"/>
     </svg>`;
   }
 
+  // ---------- Где поезд на карте: по реальному положению на маршруте ----------
+  let lastWhere = "";
+  const placeTrain = (t: number) => {
+    const r = world.route();
+    let i = 0;
+    while (i < ROUTE_STOPS.length - 1 && r.pos >= ROUTE_STOPS[i + 1].at) i++;
+    const a = ROUTE_STOPS[i], b = ROUTE_STOPS[i + 1];
+    let k = 0;
+    let p0 = STATIONS[i], p1 = STATIONS[i];
+    if (b) {
+      k = (r.pos - a.at) / (b.at - a.at);
+      p1 = STATIONS[i + 1];
+    } else {
+      // после Рускеалы состав уходит на новый круг: точка плавно возвращается к Петербургу
+      k = (r.pos - a.at) / (6400 - a.at);
+      p0 = STATIONS[i];
+      p1 = STATIONS[0];
+    }
+    const x = p0.x + (p1.x - p0.x) * k, y = p0.y + (p1.y - p0.y) * k;
+    map.querySelectorAll<SVGCircleElement>("circle.train, circle.pulse").forEach((c) => {
+      c.setAttribute("cx", x.toFixed(1));
+      c.setAttribute("cy", y.toFixed(1));
+    });
+    const pulse = map.querySelector<SVGCircleElement>("circle.pulse");
+    if (pulse) pulse.setAttribute("r", (9 + Math.sin(t * 4) * 3).toFixed(1));
+    const where = r.here ?? (b ? `${a.name} → ${b.name}` : `${a.name} → новый круг`);
+    if (where !== lastWhere) {
+      const w = map.querySelector(".where");
+      if (w) w.textContent = where;
+      lastWhere = where;
+    }
+  };
+
   // ---------- Плашка над вагоном следует за камерой ----------
-  const tick = () => {
+  const tick = (now: number) => {
+    placeTrain(now / 1000);
     const show = tagFor !== null && !panel && world.mode === "hub";
     tag.classList.toggle("hidden", !show);
     if (show) {

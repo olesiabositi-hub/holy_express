@@ -16,8 +16,9 @@ let enabled = (() => {
   }
 })();
 
+let unlocked = false;
 function ensure() {
-  if (ctx || !enabled) return ctx;
+  if (ctx || !enabled || !unlocked) return ctx;
   try {
     ctx = new AudioContext();
     master = ctx.createGain();
@@ -32,6 +33,7 @@ function ensure() {
 
 /** Вызвать из обработчика клика: разблокирует звук. */
 export function unlockAudio() {
+  unlocked = true;
   const c = ensure();
   if (c && c.state === "suspended") c.resume().catch(() => {});
 }

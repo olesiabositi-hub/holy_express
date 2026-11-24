@@ -6,7 +6,8 @@ import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { makeMountains, makeSky } from "./sky";
-import { makeScenery } from "./scenery";
+import { CLEAR, makeScenery } from "./scenery";
+import { makeJourney, STOPS } from "./landmarks";
 import { makeTrain } from "./train";
 import { makeFinaleTree, makeReindeer, makeSanta, makeSnow, makeSteam } from "./fx";
 import { setTrainMoving, whistle } from "../audio";
@@ -55,6 +56,7 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
   const sky = makeSky(scene);
   const mountains = makeMountains(scene);
   const scenery = makeScenery(scene, [700, 1200, 1700][tier]);
+  const journey = makeJourney(scene, scenery.glow, scenery.lightMat, CLEAR);
   const train = makeTrain(scene);
   const snow = makeSnow(scene, [3500, 7000, 11000][tier]);
   const steam = makeSteam(scene, train.chimney);
@@ -153,6 +155,18 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
     else if (car !== null) events.select(car);
   });
 
+  // белая вспышка-переход поверх сцены
+  const flashEl = document.createElement("div");
+  Object.assign(flashEl.style, { position: "absolute", inset: "0", background: "radial-gradient(circle, #ffffff, #cfe2ff)", opacity: "0", pointerEvents: "none", transition: "opacity .6s ease" });
+  container.appendChild(flashEl);
+  const flash = (mid: () => void) => {
+    flashEl.style.opacity = "1";
+    setTimeout(() => {
+      mid();
+      flashEl.style.opacity = "0";
+    }, 650);
+  };
+
   const resize = () => {
     const w = container.clientWidth, h = container.clientHeight;
     renderer.setSize(w, h);
@@ -175,6 +189,7 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
     speed += (speedTarget - speed) * Math.min(1, dt * 0.5);
     const dx = speed * dt;
     travelled += dx;
+    journey.update(dx, t);
     scenery.update(dx, t);
     mountains.update(dx);
     sky.update(t, dt);
@@ -182,13 +197,24 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
     whistleSteam.update(dt, speed);
     // праздничный полустанок впереди — поезд гудит в ответ машущим людям
     const festNow = scenery.festiveX();
-    if (festPrev > 52 && festNow <= 52 && speed > 2) toot();
+    if (festPrev > 52 && festNow <= 52 && speed > 2 && scenery.festiveVisible()) toot();
     festPrev = festNow;
+    // и на подходе к каждой настоящей станции маршрута
+    const jp = journey.status().pos;
+    for (const st of STOPS) {
+      const ahead = st.at - jp;
+      if (ahead <= 60 && ahead > 60 - dx - 0.001 && speed > 2) toot();
+    }
     train.update(dt, t, speed);
     steam.update(dt, speed);
     snow.update(t, travelled, tmp.set(camera.position.x * 0.5, 0, camera.position.z * 0.4));
     santa.update(dt, t, mode !== "focus" && !reduceMotion);
     tree.update(dt, t);
+    // ёлка стоит в каньоне: когда поезд трогается, она уезжает назад вместе с миром
+    if (tree.group.visible) {
+      tree.group.position.x -= dx;
+      if (tree.group.position.x < -400) tree.group.visible = false;
+    }
 
     if (shot) {
       shot.k = Math.min(1, shot.k + dt / shot.dur);
@@ -265,14 +291,19 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
       mode = "finale";
       if (focused >= 0) train.carByCase(focused).openTarget = 0;
       focused = -1;
-      speedTarget = 0;
       setTrainMoving(false);
+      // поезд прибывает в Рускеалу: короткая снежная вспышка, и мы у мраморного каньона
+      flash(() => {
+        journey.jump(journey.canyonAt + 4);
+        journey.finaleMode(true);
+        speed = 0;
+        speedTarget = 0;
+      });
       setTimeout(toot, 2600);
-      // ёлка вырастает впереди состава, мир останавливается
-      setTimeout(() => tree.start(new THREE.Vector3(58, 0, -30)), 1200);
-      fly(new THREE.Vector3(-30, 16, 62), new THREE.Vector3(34, 20, -20), 3.2, () => {
+      setTimeout(() => tree.start(new THREE.Vector3(0, 0.1, -58)), 1400);
+      fly(new THREE.Vector3(-40, 24, 42), new THREE.Vector3(0, 15, -46), 3.2, () => {
         controls.enabled = true;
-        controls.target.set(34, 20, -20);
+        controls.target.set(0, 15, -46);
         controls.minDistance = 30;
         controls.maxDistance = 160;
         onArrive();
@@ -282,11 +313,13 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
       mode = "hub";
       speedTarget = 11;
       setTrainMoving(true);
+      journey.finaleMode(false);
       controls.minDistance = 28;
       hubFor();
       fly(HUB_POS.clone(), new THREE.Vector3(-2, 7, 0), 2.2, () => (controls.enabled = true));
     },
     toot,
+    route: () => journey.status(),
     get mode() {
       return mode;
     },

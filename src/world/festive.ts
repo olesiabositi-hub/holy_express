@@ -12,19 +12,21 @@ const PALETTE = [
 ];
 
 /** Общий материал мерцающих огоньков: всё мерцание — в шейдере. */
-export function twinkleMaterial(map: THREE.Texture) {
+export function twinkleMaterial(map: THREE.Texture, clear?: { value: THREE.Vector4[] }, clearGlsl = "") {
   return new THREE.ShaderMaterial({
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    uniforms: { t: { value: 0 }, map: { value: map }, px: { value: Math.min(devicePixelRatio, 2) } },
-    vertexShader: `attribute vec3 color; attribute float seed; uniform float t, px; varying vec3 c; varying float a;
+    uniforms: { t: { value: 0 }, map: { value: map }, px: { value: Math.min(devicePixelRatio, 2) }, uClear: clear ?? { value: Array.from({ length: 8 }, () => new THREE.Vector4(1, -1, 0, 0)) } },
+    vertexShader: `${clearGlsl || "uniform vec4 uClear[8]; bool inClear(vec3 w){ return false; }"}
+      attribute vec3 color; attribute float seed; uniform float t, px; varying vec3 c; varying float a;
       void main(){
         c = color;
         a = 0.45 + 0.55 * max(0.0, sin(t * (1.5 + seed * 2.5) + seed * 40.0));
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         gl_PointSize = (2.2 + seed * 1.2) * px * (40.0 / -mv.z) + 1.5;
         gl_Position = projectionMatrix * mv;
+        if (inClear((modelMatrix * vec4(position, 1.0)).xyz)) gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
       }`,
     fragmentShader: `uniform sampler2D map; varying vec3 c; varying float a;
       void main(){ vec4 tx = texture2D(map, gl_PointCoord); gl_FragColor = vec4(c * a, tx.a * min(1.0, a + 0.2)); }`,
