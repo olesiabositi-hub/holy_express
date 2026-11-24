@@ -124,7 +124,7 @@ export function makeSteam(scene: THREE.Scene, origin: THREE.Vector3, continuous 
 }
 
 /**
- * Дед Мороз на олене — анимированная модель от заказчицы (public/models/santa.glb, 1,65 с цикл бега).
+ * Дед Мороз на олене — анимированная модель от заказчицы (public/models/santa.json, 1,65 с цикл бега).
  * Пролетает раз в 30–50 секунд со случайной стороны, за ним искристый хвост.
  */
 export function makeSanta(scene: THREE.Scene) {
@@ -132,30 +132,52 @@ export function makeSanta(scene: THREE.Scene) {
   const model = new THREE.Group(); // поворачиваем всю группу по направлению полёта
   g.add(model);
   let mixer: THREE.AnimationMixer | null = null;
-  new GLTFLoader().load(
-    `${import.meta.env.BASE_URL}models/santa.glb`,
-    (gltf) => {
-      const root = gltf.scene;
-      // в модели ~25 единиц от саней до морды оленя; уменьшаем до размера, читаемого в небе
-      root.scale.setScalar(0.7);
-      root.traverse((o) => {
-        const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
-        if (m && "emissive" in m) {
-          // ночь: чуть подсвечиваем, чтобы модель не была тёмным силуэтом
-          m.emissive = new THREE.Color("#3a2a24");
-          m.emissiveMap = m.map ?? null;
-          m.emissiveIntensity = 0.55;
-        }
+  // Модель лежит как glTF-JSON со встроенными данными (так её отдаёт любой хостинг).
+  // Собираем из неё GLB в памяти и разбираем без лишних запросов (data:-адреса могут быть запрещены политикой страницы).
+  fetch(`${import.meta.env.BASE_URL}models/santa.json`)
+    .then((r) => r.json())
+    .then((json) => {
+      const b64 = String(json.buffers[0].uri).split(",")[1];
+      const bin = Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
+      delete json.buffers[0].uri;
+      json.buffers[0].byteLength = bin.length;
+      const jsonBytes = new TextEncoder().encode(JSON.stringify(json));
+      const jsonLen = Math.ceil(jsonBytes.length / 4) * 4;
+      const binLen = Math.ceil(bin.length / 4) * 4;
+      const glb = new ArrayBuffer(12 + 8 + jsonLen + 8 + binLen);
+      const dv = new DataView(glb);
+      dv.setUint32(0, 0x46546c67, true); // "glTF"
+      dv.setUint32(4, 2, true);
+      dv.setUint32(8, glb.byteLength, true);
+      dv.setUint32(12, jsonLen, true);
+      dv.setUint32(16, 0x4e4f534a, true); // "JSON"
+      const u8 = new Uint8Array(glb);
+      u8.fill(0x20, 20, 20 + jsonLen);
+      u8.set(jsonBytes, 20);
+      dv.setUint32(20 + jsonLen, binLen, true);
+      dv.setUint32(24 + jsonLen, 0x004e4942, true); // "BIN"
+      u8.set(bin, 28 + jsonLen);
+      new GLTFLoader().parse(glb, "", (gltf) => {
+        const root = gltf.scene;
+        // в модели ~25 единиц от саней до морды оленя; уменьшаем до размера, читаемого в небе
+        root.scale.setScalar(0.7);
+        root.traverse((o) => {
+          const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+          if (m && "emissive" in m) {
+            // ночь: чуть подсвечиваем, чтобы модель не была тёмным силуэтом
+            m.emissive = new THREE.Color("#3a2a24");
+            m.emissiveMap = m.map ?? null;
+            m.emissiveIntensity = 0.55;
+          }
+        });
+        model.add(root);
+        mixer = new THREE.AnimationMixer(root);
+        gltf.animations.forEach((a) => mixer!.clipAction(a).play());
       });
-      model.add(root);
-      mixer = new THREE.AnimationMixer(root);
-      gltf.animations.forEach((a) => mixer!.clipAction(a).play());
-    },
-    undefined,
-    () => {
-      // модель не загрузилась — Санта просто не прилетит, игра работает
-    },
-  );
+    })
+    .catch(() => {
+      // модель не загрузилась — Дед Мороз просто не прилетит, игра работает
+    });
   // тёплый свет фонаря саней
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: softDot(), color: new THREE.Color(2.2, 1.6, 0.9), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   glow.scale.setScalar(9);
