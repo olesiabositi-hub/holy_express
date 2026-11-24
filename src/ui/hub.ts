@@ -3,6 +3,7 @@ import { CASES } from "../story/cases";
 import { fmtTime, isOpen, PREVIEW, resetAll, save, type Save } from "../state";
 import { openCase } from "./caseScene";
 import { ticketSvg } from "./ticket";
+import { emo } from "./emo";
 import { STOPS as ROUTE_STOPS } from "../world/landmarks";
 import { setSound, soundOn, unlockAudio } from "../audio";
 
@@ -242,7 +243,7 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
 
   function showIntro() {
     modal(
-      `<div class="hero-banner"><div class="k">Детектив в пяти вагонах</div><h2>Код-фриз экспресс</h2></div>
+      `<div class="hero-banner"><div class="k">Детектив в пяти вагонах</div><h2>Код-фриз экспресс</h2><div class="hero-emo">${["xmastree", "gingerbread", "eyes", "mitten", "tangerine", "popper"].map((n) => emo(n)).join("")}</div></div>
       <p class="lead">31 декабря, ночь. Последний релизный поезд года идёт из Петербурга в Рускеалу. Ровно в 00:00 он должен доставить релиз в прод.</p>
       <p class="lead">Но в каждом вагоне что-то случается. Каждый рабочий день с 21 по 25 декабря открывается новое дело. Расставь подозреваемых по уликам и найди виновного.</p>
       <div class="row"><button class="btn primary" data-close>Поехали</button><button class="btn" data-rules>Как играть</button></div>`,
@@ -314,7 +315,7 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
       S.finaleSeen = true;
       save(S);
       modal(
-        `<div class="hero-banner"><div class="k">00:00 · 1 января 2027</div><h2>Релиз доставлен</h2></div>
+        `<div class="hero-banner"><div class="k">00:00 · 1 января 2027</div><h2>Релиз доставлен</h2><div class="hero-emo">${["popper", "xmastree", "heart", "gingerbread", "snowball", "popper"].map((n) => emo(n)).join("")}</div></div>
         <p class="lead">Поезд остановился посреди Рускеалы. Весь состав вышел на снег, а прямо на карте выросла ёлка. Это и была секретная фича, которую готовили всю неделю.</p>
         <div class="tiles"><div class="tile g"><div class="v">${fmtTime(total)}</div><div class="l">на все расследования</div></div>
           <div class="tile y"><div class="v">${hints}</div><div class="l">подсказок</div></div>

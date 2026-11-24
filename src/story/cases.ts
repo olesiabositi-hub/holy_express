@@ -14,7 +14,7 @@ export type CaseDef = {
   layout: Layout;
   suspects: string[]; // id героев
   culprit: string;
-  item: { name: string; gender: Gender; icon: string; gen: string; ins: string };
+  item: { name: string; gender: Gender; icon: string; img?: string; gen: string; ins: string };
   reveal: string[];
   evidence: string; // что уходит в блокнот
   allow: Pred["t"][]; // какие улики разрешены генератору
@@ -99,7 +99,7 @@ export const CASES: CaseDef[] = [
         { ch: "N", name: "Нижняя полка", icon: "🛋️", posture: "sit", on: "на нижней полке", near: "рядом с нижней полкой" },
         { ch: "V", name: "Верхняя полка", icon: "🛏️", posture: "lie", on: "на верхней полке", near: "под верхней полкой" },
         { ch: "t", name: "Столик", icon: "🍵", blocked: true, posture: "stand", near: "у столика" },
-        { ch: "M", name: "Пакет мандаринов", icon: "🍊", blocked: true, posture: "stand", near: "рядом с мандаринами" },
+        { ch: "M", name: "Пакет мандаринов", icon: "🍊", img: "tangerine", blocked: true, posture: "stand", near: "рядом с мандаринами" },
         { ch: "G", name: "Гитара", icon: "🎸", blocked: true, posture: "stand", near: "рядом с гитарой" },
         { ch: "S", name: "Боковое место", icon: "💺", posture: "sit", on: "на боковом месте", near: "рядом с боковым местом" },
         { ch: "K", name: "Титан", icon: "♨️", blocked: true, posture: "stand", near: "рядом с титаном" },
@@ -108,7 +108,7 @@ export const CASES: CaseDef[] = [
     },
     suspects: ["asya", "lev", "eva", "mark", "vera"],
     culprit: "asya",
-    item: { name: "Зарядка", gender: "f", icon: "🔋", gen: "зарядки", ins: "зарядкой" },
+    item: { name: "Зарядка", gender: "f", icon: "🔋", img: "battery", gen: "зарядки", ins: "зарядкой" },
     reveal: [
       "Ася. Дизайнер, у которой ноутбук в стикерах и всегда 100% заряда. Подозрительно.",
       "Всю ночь зарядка питала её ноутбук: Ася рисовала что-то огромное, зелёное и мигающее. Макет она закрыла раньше, чем мы успели разглядеть.",
@@ -129,7 +129,7 @@ export const CASES: CaseDef[] = [
     segment: "Приозерск → Лахденпохья",
     intro: [
       "В релиз проскочила задача, после которой кнопка «Построить маршрут» ведёт на Луну.",
-      "Ревью пройдено, апрув стоит. Но чей? Утром нашли кружку с надписью «LGTM», ещё тёплую.",
+      "Ревью пройдено, апрув стоит. Но чей? Утром нашли стакан с надписью «LGTM», лёд в нём ещё не растаял.",
       "Даже ИИ-ассистент Кеша под подозрением. Он очень хотел помочь.",
     ],
     layout: {
@@ -156,11 +156,11 @@ export const CASES: CaseDef[] = [
     },
     suspects: ["mark", "nika", "gleb", "sonya", "kesha"],
     culprit: "mark",
-    item: { name: "Кружка «LGTM»", gender: "f", icon: "☕", gen: "кружки «LGTM»", ins: "кружкой «LGTM»" },
+    item: { name: "Стакан «LGTM»", gender: "m", icon: "🥤", img: "drink", gen: "стакана «LGTM»", ins: "стаканом «LGTM»" },
     reveal: [
       "Марк. Тимлид, у которого нет свободных слотов, нашёл слот на апрув в 03:12.",
       "Он не глядел в код, потому что уже видел его: весь поезд неделю писал одну и ту же секретную фичу. Кнопка на Луну — отвлекающий манёвр, её откатили за минуту.",
-      "Под кружкой схема с часовыми поясами и пометкой Евы: «таймер проверить в ресторане».",
+      "Под стаканом схема с часовыми поясами и пометкой Евы: «таймер проверить в ресторане».",
     ],
     evidence: "Схема часовых поясов с пометкой Евы",
     allow: ["on", "beside", "zone", "window", "notWindow", "notZone", "col", "row", "corner"],
@@ -195,8 +195,8 @@ export const CASES: CaseDef[] = [
         { ch: "S", name: "Барная стойка", icon: "🍸", blocked: true, posture: "stand", near: "у барной стойки" },
         { ch: "X", name: "Барный стул", icon: "🪩", posture: "sit", on: "на барном стуле", near: "рядом с барным стулом" },
         { ch: "C", name: "Стул", icon: "🪑", posture: "sit", on: "на стуле", near: "рядом со стулом" },
-        { ch: "T", name: "Стол", icon: "🍽️", blocked: true, posture: "stand", near: "у стола" },
-        { ch: "Ё", name: "Ёлка", icon: "🎄", blocked: true, posture: "stand", near: "у ёлки" },
+        { ch: "T", name: "Стол с шубой", icon: "🍽️", img: "shuba", blocked: true, posture: "stand", near: "у стола" },
+        { ch: "Ё", name: "Ёлка", icon: "🎄", img: "xmastree", blocked: true, posture: "stand", near: "у ёлки" },
         { ch: "П", name: "Плита", icon: "🍳", blocked: true, posture: "stand", near: "у плиты" },
         { ch: "K", name: "Кофемашина", icon: "☕", blocked: true, posture: "stand", near: "у кофемашины" },
       ],
@@ -243,10 +243,10 @@ export const CASES: CaseDef[] = [
       kinds: [
         { ch: "P", name: "Пульт", icon: "🎛️", blocked: true, posture: "stand", near: "у пульта" },
         { ch: "M", name: "Кресло машиниста", icon: "💺", posture: "sit", on: "в кресле машиниста", near: "рядом с креслом машиниста" },
-        { ch: "F", name: "Топка", icon: "🔥", blocked: true, posture: "stand", near: "у топки" },
+        { ch: "F", name: "Топка", icon: "🔥", img: "fire", blocked: true, posture: "stand", near: "у топки" },
         { ch: "D", name: "Диван", icon: "🛋️", posture: "sit", on: "на диване", near: "рядом с диваном" },
         { ch: "A", name: "Ящик с инструментами", icon: "🧰", posture: "sit", on: "на ящике с инструментами", near: "рядом с ящиком инструментов" },
-        { ch: "Y", name: "Ёлочка", icon: "🎄", blocked: true, posture: "stand", near: "у ёлочки" },
+        { ch: "Y", name: "Ёлочка", icon: "🎄", img: "fir", blocked: true, posture: "stand", near: "у ёлочки" },
         { ch: "U", name: "Уголь", icon: "🪨", posture: "stand", on: "на куче угля", near: "рядом с углём" },
       ],
     },

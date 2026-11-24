@@ -209,3 +209,12 @@
   .rv-hero h2 { font-size: 22px; }
   .portrait.big { width: 90px; }
 }
+
+/* фирменные эмодзи 2ГИС */
+img.e { width: 1.25em; height: 1.25em; object-fit: contain; display: block; pointer-events: none; -webkit-user-drag: none; }
+.portrait .emo img.e { width: 1.45em; height: 1.45em; filter: drop-shadow(0 6px 8px rgba(0, 0, 0, .28)); }
+.tok .emo img.e { width: 1.35em; height: 1.35em; }
+.c2 .furn img.e { width: 1.4em; height: 1.4em; }
+.drag-ghost img.e { width: 1.2em; height: 1.2em; }
+.hero-emo { display: flex; gap: 6px; margin-top: 10px; }
+.hero-emo img.e { width: 44px; height: 44px; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .3)); }

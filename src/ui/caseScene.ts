@@ -15,6 +15,7 @@ import { hero } from "../story/heroes";
 import { fmtTime, isOpen, save, type Save } from "../state";
 import { ticketSvg } from "./ticket";
 import { howToPlay, tutorial } from "./howto";
+import { emo } from "./emo";
 
 export type PanelHost = {
   root: HTMLElement;
@@ -48,7 +49,7 @@ export function openCase(host: PanelHost, index: number) {
   const S = host.save;
   const letter = (f: number) => (figs[f].item ? "★" : figs[f].name[0]);
   const color = (f: number) => (figs[f].item ? "#FFB919" : hero(figs[f].id).color);
-  const avatar = (f: number) => (figs[f].item ? c.item.icon : hero(figs[f].id).emoji);
+  const avatar = (f: number) => (figs[f].item ? (c.item.img ? emo(c.item.img) : c.item.icon) : emo(hero(figs[f].id).img));
 
   const scene = el("section", "case-scene");
   scene.setAttribute("role", "dialog");
@@ -180,7 +181,7 @@ export function openCase(host: PanelHost, index: number) {
     if (wall(r, col - 1)) d.classList.add("wl");
     if (wall(r, col + 1)) d.classList.add("wr");
     const k = kindAt(l, i);
-    if (k) d.innerHTML = `<span class="furn" title="${k.name}${k.blocked ? " — занято" : ""}">${k.icon}</span>`;
+    if (k) d.innerHTML = `<span class="furn" title="${k.name}${k.blocked ? " — занято" : ""}">${k.img ? emo(k.img) : k.icon}</span>`;
     if (isBlocked(l, i)) d.classList.add("blocked");
     d.setAttribute("aria-label", `${cellName(n, i)}${k ? ", " + k.name : ""}`);
     grid.appendChild(d);
@@ -546,7 +547,7 @@ export function openCase(host: PanelHost, index: number) {
     const have = CASES.map((cc) => !!S.solved[cc.id]);
     const wrap = el("div", "cs-reveal");
     wrap.innerHTML = `
-      <div class="rv-hero"><div class="portrait big" style="--c:${h.color}"><span class="emo">${h.emoji}</span><span class="ribbon">${h.name}</span></div>
+      <div class="rv-hero"><div class="portrait big" style="--c:${h.color}"><span class="emo">${emo(h.img)}</span><span class="ribbon">${h.name}</span></div>
         <div><div class="rv-k">${fresh ? "Дело раскрыто" : "Раскрытое дело"} · ${c.wagon}</div><h2>${h.name} · ${h.role}</h2></div></div>
       <div class="rv-text">${c.reveal.map((p) => `<p>${p}</p>`).join("")}</div>
       <div class="rv-tiles">

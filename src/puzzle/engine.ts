@@ -14,6 +14,7 @@ export type ObjKind = {
   ch: string;
   name: string;
   icon: string;
+  img?: string; // фирменный эмодзи 2ГИС вместо обычного
   blocked?: boolean;
   posture: Posture;
   on?: string; // «на нижней полке»

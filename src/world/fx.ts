@@ -1,5 +1,6 @@
 // Снег, пар, Санта на оленях, финальная ёлка с салютом.
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { softDot } from "./tex";
 
 /** Снег тремя слоями: всё в шейдере, процессор не трогаем. */
@@ -122,95 +123,83 @@ export function makeSteam(scene: THREE.Scene, origin: THREE.Vector3, continuous 
   };
 }
 
-/** Санта на оленях. Пролетает раз в 30–50 секунд со случайной стороны. */
+/**
+ * Дед Мороз на олене — анимированная модель от заказчицы (public/models/santa.glb, 1,65 с цикл бега).
+ * Пролетает раз в 30–50 секунд со случайной стороны, за ним искристый хвост.
+ */
 export function makeSanta(scene: THREE.Scene) {
   const g = new THREE.Group();
-  const red = new THREE.MeshStandardMaterial({ color: "#c0262d", roughness: 0.4, metalness: 0.2 });
-  const gold = new THREE.MeshStandardMaterial({ color: "#d9b25a", metalness: 0.9, roughness: 0.25 });
-  const brown = new THREE.MeshStandardMaterial({ color: "#6a4630", roughness: 0.8 });
-  const sleigh = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.9, 1.3), red);
-  sleigh.position.set(0, 0.45, 0);
-  g.add(sleigh);
-  const back = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.0, 1.3), red);
-  back.position.set(-1.0, 1.0, 0);
-  g.add(back);
-  for (const z of [-0.6, 0.6]) {
-    const runner = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.06, 6, 20, Math.PI * 0.8), gold);
-    runner.position.set(0.1, 0.2, z);
-    runner.rotation.z = Math.PI * 1.1;
-    runner.scale.y = 0.35;
-    g.add(runner);
-  }
-  const santa = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 10), red);
-  santa.position.set(-0.4, 1.2, 0);
-  g.add(santa);
-  const beard = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), new THREE.MeshStandardMaterial({ color: "#ffffff" }));
-  beard.position.set(-0.15, 1.45, 0);
-  g.add(beard);
-  const sack = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), new THREE.MeshStandardMaterial({ color: "#2c6b3f" }));
-  sack.position.set(-0.75, 1.25, 0.2);
-  g.add(sack);
-  const deer: THREE.Group[] = [];
-  for (let i = 0; i < 4; i++) {
-    const d = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.7, 4, 8).rotateZ(Math.PI / 2), brown);
-    d.add(body);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), brown);
-    head.position.set(0.55, 0.3, 0);
-    d.add(head);
-    for (const z of [-0.08, 0.08]) {
-      const antler = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.4, 4), gold);
-      antler.position.set(0.5, 0.55, z);
-      antler.rotation.z = -0.4;
-      d.add(antler);
-    }
-    if (i === 3) {
-      const nose = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 0.4, 0.3) }));
-      nose.position.set(0.72, 0.3, 0);
-      d.add(nose);
-    }
-    d.position.set(2.2 + Math.floor(i / 2) * 1.3, 0.6, i % 2 ? 0.45 : -0.45);
-    g.add(d);
-    deer.push(d);
-  }
+  const model = new THREE.Group(); // поворачиваем всю группу по направлению полёта
+  g.add(model);
+  let mixer: THREE.AnimationMixer | null = null;
+  new GLTFLoader().load(
+    `${import.meta.env.BASE_URL}models/santa.glb`,
+    (gltf) => {
+      const root = gltf.scene;
+      // в модели ~25 единиц от саней до морды оленя; уменьшаем до размера, читаемого в небе
+      root.scale.setScalar(0.7);
+      root.traverse((o) => {
+        const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+        if (m && "emissive" in m) {
+          // ночь: чуть подсвечиваем, чтобы модель не была тёмным силуэтом
+          m.emissive = new THREE.Color("#3a2a24");
+          m.emissiveMap = m.map ?? null;
+          m.emissiveIntensity = 0.55;
+        }
+      });
+      model.add(root);
+      mixer = new THREE.AnimationMixer(root);
+      gltf.animations.forEach((a) => mixer!.clipAction(a).play());
+    },
+    undefined,
+    () => {
+      // модель не загрузилась — Санта просто не прилетит, игра работает
+    },
+  );
+  // тёплый свет фонаря саней
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: softDot(), color: new THREE.Color(2.2, 1.6, 0.9), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  glow.scale.setScalar(9);
+  glow.position.set(0, 3, 0);
+  g.add(glow);
   // искристый хвост
-  const T = 140;
+  const T = 160;
   const tp = new Float32Array(T * 3);
   const tg = new THREE.BufferGeometry();
   tg.setAttribute("position", new THREE.BufferAttribute(tp, 3));
-  const trail = new THREE.Points(tg, new THREE.PointsMaterial({ map: softDot(), size: 0.9, color: new THREE.Color(2.6, 2.2, 1.2), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const trail = new THREE.Points(tg, new THREE.PointsMaterial({ map: softDot(), size: 1.1, color: new THREE.Color(2.6, 2.2, 1.2), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
   trail.frustumCulled = false;
   scene.add(trail);
-  g.scale.setScalar(2.2);
   g.visible = false;
   scene.add(g);
-  const hit = new THREE.Mesh(new THREE.SphereGeometry(4, 8, 6), new THREE.MeshBasicMaterial({ visible: false }));
-  hit.position.set(1.5, 0.8, 0);
+  const hit = new THREE.Mesh(new THREE.SphereGeometry(9, 8, 6), new THREE.MeshBasicMaterial({ visible: false }));
+  hit.position.set(0, 3, 2);
   g.add(hit);
 
-  let next = 12 + Math.random() * 10;
+  let next = new URLSearchParams(location.search).has("santa") ? 1 : 12 + Math.random() * 10;
   let tFly = -1;
-  const dur = 9;
+  const dur = 10;
   const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
   let ti = 0;
   const prev = new THREE.Vector3();
+  const p = new THREE.Vector3();
   return {
     hit,
     flying: () => g.visible,
     update(dt: number, t: number, allowed: boolean) {
+      mixer?.update(dt);
+      for (let i = 0; i < T; i++) tp[i * 3 + 1] -= dt * 1.5;
+      tg.attributes.position.needsUpdate = true;
       if (tFly < 0) {
         next -= dt;
-        if (next <= 0 && allowed) {
+        if (next <= 0 && allowed && mixer) {
           const dir = Math.random() < 0.5 ? 1 : -1;
-          const z = -20 - Math.random() * 40;
-          a.set(-dir * 140, 18 + Math.random() * 10, z - 30);
-          c.set(dir * 140, 22 + Math.random() * 14, z + 10 + Math.random() * 20);
-          b.set((Math.random() - 0.5) * 40, 32 + Math.random() * 10, z);
+          const z = -16 - Math.random() * 22;
+          a.set(-dir * 150, 11 + Math.random() * 5, z - 25);
+          c.set(dir * 150, 14 + Math.random() * 6, z + 8 + Math.random() * 12);
+          b.set((Math.random() - 0.5) * 30, 18 + Math.random() * 5, z);
           tFly = 0;
           g.visible = true;
         }
-        for (let i = 0; i < T; i++) tp[i * 3 + 1] -= dt * 2;
-        tg.attributes.position.needsUpdate = true;
         return;
       }
       tFly += dt;
@@ -222,15 +211,17 @@ export function makeSanta(scene: THREE.Scene) {
         return;
       }
       prev.copy(g.position);
-      const p = new THREE.Vector3().copy(a).multiplyScalar((1 - k) ** 2).addScaledVector(b, 2 * (1 - k) * k).addScaledVector(c, k * k);
+      p.copy(a).multiplyScalar((1 - k) ** 2).addScaledVector(b, 2 * (1 - k) * k).addScaledVector(c, k * k);
       g.position.copy(p);
       const dir = p.clone().sub(prev);
-      if (dir.lengthSq() > 1e-6) g.rotation.y = Math.atan2(-dir.z, dir.x);
-      deer.forEach((d, i) => (d.position.y = 0.6 + Math.sin(t * 10 + i) * 0.12));
-      tp.set([p.x - Math.cos(g.rotation.y) * 2 + (Math.random() - 0.5), p.y + 1 + (Math.random() - 0.5), p.z + Math.sin(g.rotation.y) * 2 + (Math.random() - 0.5)], (ti % T) * 3);
+      if (dir.lengthSq() > 1e-6) {
+        // олень в модели смотрит в −Z: разворачиваем, чтобы он летел впереди саней
+        g.rotation.y = Math.atan2(dir.x, dir.z) + Math.PI;
+        g.rotation.z = Math.sin(t * 1.3) * 0.05;
+        dir.normalize();
+      }
+      tp.set([p.x - dir.x * 9 + (Math.random() - 0.5), p.y + 2 + (Math.random() - 0.5), p.z - dir.z * 9 + (Math.random() - 0.5)], (ti % T) * 3);
       ti++;
-      for (let i = 0; i < T; i++) tp[i * 3 + 1] -= dt * 1.5;
-      tg.attributes.position.needsUpdate = true;
     },
   };
 }
