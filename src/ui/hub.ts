@@ -1,11 +1,17 @@
 // Интерфейс поверх мира: шапка, плашки вагонов, лента вагонов, мини-карта, модалки.
 import { CASES } from "../story/cases";
-import { fmtTime, isOpen, PREVIEW, resetAll, save, type Save } from "../state";
+import { fmtTime, isOpen, loadPhotos, PREVIEW, resetAll, save, savePhoto, type Save } from "../state";
+import { POSTCARDS, TOUR } from "../story/postcards";
 import { openCase } from "./caseScene";
 import { ticketSvg } from "./ticket";
 import { emo } from "./emo";
+import { hero } from "../story/heroes";
+
+const heroImg = (id: string) => hero(id).img;
 import { STOPS as ROUTE_STOPS } from "../world/landmarks";
-import { setSound, soundOn, unlockAudio } from "../audio";
+import { onSound, toggleSound, unlockAudio } from "../audio";
+
+export const CREDIT = "От команды Техномаркетинга — для всех коллег из RnD";
 
 type WorldApi = {
   screenOf: (i: number) => { x: number; y: number; visible: boolean };
@@ -14,7 +20,12 @@ type WorldApi = {
   unfocus: () => void;
   finale: (onArrive: () => void) => void;
   leaveFinale: () => void;
-  route: () => { p: number; pos: number; from: string; to: string; here: string | null };
+  route: () => { p: number; pos: number; from: string; to: string; here: string | null; closest: string; closestD: number };
+  setPaused: (p: boolean) => void;
+  readonly paused: boolean;
+  tour: (i: number) => void;
+  endTour: () => void;
+  snapshot: (cb: (url: string) => void) => void;
   readonly mode: string;
 };
 
@@ -44,7 +55,7 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
 
   // ---------- Шапка ----------
   const top = el("header", "top");
-  top.innerHTML = `<div class="brand"><div class="brand-flake">❄️</div><div><h1>Код-фриз экспресс</h1><p>Последний релизный поезд года · Петербург → Рускеала · 21–25 декабря</p></div></div>
+  top.innerHTML = `<div class="brand"><div class="brand-flake">❄️</div><div><h1>Код-фриз экспресс</h1><p>От Техномаркетинга для RnD · Петербург → Рускеала · 21–25 декабря</p></div></div>
     <div class="spacer"></div>${PREVIEW ? `<span class="preview-badge hide-sm">Предпросмотр: все вагоны открыты</span>` : ""}
     <span class="progress-pill"><span class="hide-sm">Раскрыто </span><b class="pc">0</b><span class="hide-sm"> из 5</span><span class="show-sm">/5</span></span>
     <button class="icon-btn" data-a="sound" aria-label="Звук"></button>
@@ -56,14 +67,45 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
   top.querySelector<HTMLButtonElement>('[data-a="ticket"]')!.onclick = () => showTicket();
   top.querySelector<HTMLButtonElement>('[data-a="rules"]')!.onclick = () => showRules();
   const soundBtn = top.querySelector<HTMLButtonElement>('[data-a="sound"]')!;
-  const paintSound = () => (soundBtn.textContent = soundOn() ? "🔊" : "🔇");
-  paintSound();
-  soundBtn.onclick = () => {
-    setSound(!soundOn());
-    paintSound();
-  };
+  onSound((on) => {
+    soundBtn.textContent = on ? "🔊" : "🔇";
+    soundBtn.title = on ? "Выключить звук (M)" : "Включить звук (M)";
+  });
+  soundBtn.onclick = () => toggleSound();
   // браузеры дают включить звук только после первого действия игрока
   addEventListener("pointerdown", () => unlockAudio(), { once: true });
+  // M — звук, P — пауза поезда; работают везде, даже внутри дела
+  addEventListener("keydown", (e: KeyboardEvent) => {
+    if (e.ctrlKey || e.metaKey || e.altKey || (e.target as HTMLElement)?.tagName === "INPUT") return;
+    const k = e.key.toLowerCase();
+    if (k === "m" || k === "ь") toggleSound();
+    if (k === "p" || k === "з") togglePause();
+  });
+
+  // ---------- Боковая панель: пауза, прогулка по поезду, открытки ----------
+  const rail = el("div", "rail");
+  rail.innerHTML = `<button class="rail-btn" data-a="pause"><span class="i">⏸️</span><span class="l">Пауза</span></button>
+    <button class="rail-btn" data-a="tour"><span class="i">🚶</span><span class="l">По поезду</span></button>
+    <button class="rail-btn" data-a="cards"><span class="i">🖼️</span><span class="l">Открытки</span><b class="cn"></b></button>`;
+  root.appendChild(rail);
+  const pauseBtn = rail.querySelector<HTMLButtonElement>('[data-a="pause"]')!;
+  const paintPause = () => {
+    pauseBtn.querySelector(".i")!.textContent = world.paused ? "▶" : "⏸️";
+    pauseBtn.querySelector(".l")!.textContent = world.paused ? "Поехали" : "Пауза";
+    pauseBtn.classList.toggle("on", world.paused);
+    pauseBtn.title = world.paused ? "Поезд стоит. Нажми, чтобы ехать дальше (P)" : "Остановить поезд (P)";
+  };
+  function togglePause() {
+    world.setPaused(!world.paused);
+    paintPause();
+    toast(world.paused ? "Поезд стоит. Можно спокойно всё рассмотреть 📸" : "Поехали дальше! 🚂");
+  }
+  pauseBtn.onclick = togglePause;
+  paintPause();
+  rail.querySelector<HTMLButtonElement>('[data-a="tour"]')!.onclick = () => startTour(0);
+  rail.querySelector<HTMLButtonElement>('[data-a="cards"]')!.onclick = () => showCards();
+  const paintCards = () => (rail.querySelector(".cn")!.textContent = `${Object.keys(S.cards).length}/${POSTCARDS.length}`);
+  paintCards();
 
   // ---------- Плашка над вагоном ----------
   const tag = el("div", "gis-tag hidden", `<div class="bubble"></div><div class="tail"></div>`);
@@ -80,10 +122,11 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
   root.appendChild(map);
   map.onclick = () => map.classList.toggle("big");
 
-  const toast = (t: string) => {
-    const d = el("div", "toast", t);
+  const toast = (t: string, onClick?: () => void) => {
+    const d = el("div", `toast ${onClick ? "click" : ""}`, t);
+    if (onClick) d.onclick = () => (d.remove(), onClick());
     root.appendChild(d);
-    setTimeout(() => d.remove(), 3300);
+    setTimeout(() => d.remove(), onClick ? 5200 : 3300);
   };
 
   let panel: { close: () => void } | null = null;
@@ -123,6 +166,7 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
   function showChrome(on: boolean) {
     strip.classList.toggle("hidden", !on);
     map.classList.toggle("hidden", !on);
+    rail.classList.toggle("hidden", !on);
     if (!on) tag.classList.add("hidden");
   }
 
@@ -211,6 +255,7 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
   // ---------- Плашка над вагоном следует за камерой ----------
   const tick = (now: number) => {
     placeTrain(now / 1000);
+    collect();
     const show = tagFor !== null && !panel && world.mode === "hub";
     tag.classList.toggle("hidden", !show);
     if (show) {
@@ -225,6 +270,85 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
+
+  // ---------- Прогулка по поезду ----------
+  const tourBar = el("div", "tour hidden");
+  root.appendChild(tourBar);
+  let tourAt = -1;
+  function startTour(i: number) {
+    if (panel) return;
+    if (tourAt < 0) showChrome(false);
+    tourAt = (i + TOUR.length) % TOUR.length;
+    world.tour(tourAt);
+    const c = CASES[tourAt];
+    const open = isOpen(tourAt);
+    const who = open ? c.suspects.map((id) => emo(heroImg(id))).join("") : "";
+    tourBar.classList.remove("hidden");
+    tourBar.innerHTML = `<div class="tour-k">Прогулка по поезду · ${tourAt + 1} из ${TOUR.length}</div>
+      <h3>${TOUR[tourAt].title}</h3>
+      <p>${open ? TOUR[tourAt].text : `Вагон опечатан до ${c.dateLabel.replace(/,.*/, "")}. Говорят, внутри уже что-то случилось.`}</p>
+      ${who ? `<div class="tour-who">${who}<span>едут в этом вагоне</span></div>` : ""}
+      <div class="tour-nav"><button class="btn" data-p aria-label="Назад">←</button><button class="btn" data-x>Вернуться</button>${open ? `<button class="btn primary" data-go>${S.solved[c.id] ? "Открыть дело" : "Расследовать"}</button>` : ""}<button class="btn" data-n aria-label="Дальше">→</button></div>
+      <small>Крути сцену, чтобы рассмотреть вагон</small>`;
+    tourBar.querySelector<HTMLButtonElement>("[data-p]")!.onclick = () => startTour(tourAt - 1);
+    tourBar.querySelector<HTMLButtonElement>("[data-n]")!.onclick = () => startTour(tourAt + 1);
+    tourBar.querySelector<HTMLButtonElement>("[data-x]")!.onclick = () => endTour();
+    const go = tourBar.querySelector<HTMLButtonElement>("[data-go]");
+    if (go) go.onclick = () => {
+      const k = tourAt;
+      tourAt = -1;
+      tourBar.classList.add("hidden");
+      showChrome(false);
+      world.focus(k, () => (panel = openCase(host, k)));
+    };
+  }
+  function endTour() {
+    if (tourAt < 0) return;
+    tourAt = -1;
+    tourBar.classList.add("hidden");
+    world.endTour();
+    showChrome(true);
+  }
+
+  // ---------- Открытки из окна ----------
+  const photos = loadPhotos();
+  let snapping = false;
+  const collect = () => {
+    const r = world.route();
+    if (snapping || S.cards[r.closest] || r.closestD > 8 || r.closestD < -30 || world.mode !== "hub" || panel || root.querySelector(".modal-bg")) return;
+    const pc = POSTCARDS.find((p) => p.name === r.closest);
+    if (!pc) return;
+    snapping = true;
+    world.snapshot((url) => {
+      photos[pc.name] = url;
+      savePhoto(pc.name, url);
+    });
+    setTimeout(() => {
+      snapping = false;
+      S.cards[pc.name] = Date.now();
+      save(S);
+      paintCards();
+      const n = Object.keys(S.cards).length;
+      if (n === POSTCARDS.length) toast("Ачивка: все открытки маршрута собраны! 🖼️", () => showCards(pc.name));
+      else toast(`📸 Новая открытка: ${pc.name} · посмотреть`, () => showCards(pc.name));
+    }, 120);
+  };
+
+  function showCards(focusName?: string) {
+    const n = Object.keys(S.cards).length;
+    const grid = POSTCARDS.map((p) => {
+      const got = !!S.cards[p.name];
+      const ph = photos[p.name];
+      return `<figure class="pcard ${got ? "" : "locked"}" data-n="${p.name}">
+        <div class="pc-img" ${got && ph ? `style="background-image:url(${ph})"` : ""}>${got ? (ph ? "" : emo(p.img)) : "❔"}<span class="pc-stamp">${got ? emo(p.img) : ""}</span></div>
+        <figcaption><b>${got ? p.name : "Ещё не проезжали"}</b>${got ? `<span>${p.fact}</span>` : `<span>Появится, когда поезд проедет мимо.</span>`}</figcaption></figure>`;
+    }).join("");
+    const { m } = modal(`<h2>Открытки из окна</h2>
+      <p class="lead" style="font-size:16px">Собрано ${n} из ${POSTCARDS.length}. Поезд едет мимо настоящих мест маршрута Петербург → Рускеала. Когда место рядом, получается фото на память. Хочешь рассмотреть — поставь поезд на паузу.</p>
+      <div class="pc-grid">${grid}</div>
+      <div class="row"><button class="btn primary" data-close>Закрыть</button></div>`);
+    if (focusName) m.querySelector(`[data-n="${focusName}"]`)?.scrollIntoView({ block: "center" });
+  }
 
   // ---------- Модалки ----------
   function modal(html: string, onClose?: () => void, side = false) {
@@ -243,9 +367,10 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
 
   function showIntro() {
     modal(
-      `<div class="hero-banner"><div class="k">Детектив в пяти вагонах</div><h2>Код-фриз экспресс</h2><div class="hero-emo">${["xmastree", "gingerbread", "eyes", "mitten", "tangerine", "popper"].map((n) => emo(n)).join("")}</div></div>
+      `<div class="hero-banner"><div class="k">Детектив в пяти вагонах</div><h2>Код-фриз экспресс</h2><div class="credit">${CREDIT}</div><div class="hero-emo">${["xmastree", "gingerbread", "eyes", "mitten", "tangerine", "popper"].map((n) => emo(n)).join("")}</div></div>
       <p class="lead">31 декабря, ночь. Последний релизный поезд года идёт из Петербурга в Рускеалу. Ровно в 00:00 он должен доставить релиз в прод.</p>
       <p class="lead">Но в каждом вагоне что-то случается. Каждый рабочий день с 21 по 25 декабря открывается новое дело. Расставь подозреваемых по уликам и найди виновного.</p>
+      <p class="lead" style="font-size:15px;color:var(--muted)">А пока ждёшь следующее дело — прогуляйся по вагонам, собери открытки из окна и поймай Деда Мороза на олене. Поезд можно поставить на паузу.</p>
       <div class="row"><button class="btn primary" data-close>Поехали</button><button class="btn" data-rules>Как играть</button></div>`,
       () => {
         S.introSeen = true;
@@ -277,6 +402,7 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
       <div class="rule"><span class="n">5</span><span><b>Виновный — единственный подозреваемый в одной зоне с уликой.</b></span></div>
       <div class="rule"><span class="n">6</span><span>Каждое раскрытое дело — часть билета. Собери все пять, и в финале на билете появится код с подарком.</span></div>
       <p class="lead" style="font-size:15px">Короткое нажатие на клетку — заметка, нажать и подержать — поставить персонажа. Подробная справка — кнопка «Как играть» внутри вагона. У каждого дела одно решение, его можно найти логикой. Прогресс сохраняется в этом браузере.</p>
+      <p style="color:var(--muted);font-size:13px">«Код-фриз экспресс» — новогодняя игра. ${CREDIT}. Звук — кнопка 🔊 или клавиша M, пауза поезда — P.</p>
       <div class="row"><button class="btn primary" data-close>Понятно</button></div>`);
   }
 
@@ -317,6 +443,7 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
       modal(
         `<div class="hero-banner"><div class="k">00:00 · 1 января 2027</div><h2>Релиз доставлен</h2><div class="hero-emo">${["popper", "xmastree", "heart", "gingerbread", "snowball", "popper"].map((n) => emo(n)).join("")}</div></div>
         <p class="lead">Поезд остановился посреди Рускеалы. Весь состав вышел на снег, а прямо на карте выросла ёлка. Это и была секретная фича, которую готовили всю неделю.</p>
+        <p class="lead" style="font-size:15px;color:var(--muted)">С Новым годом! ${CREDIT} ❤️</p>
         <div class="tiles"><div class="tile g"><div class="v">${fmtTime(total)}</div><div class="l">на все расследования</div></div>
           <div class="tile y"><div class="v">${hints}</div><div class="l">подсказок</div></div>
           <div class="tile"><div class="v">${S.santa}</div><div class="l">раз пойман Санта</div></div></div>
@@ -340,6 +467,13 @@ export function createHub(root: HTMLElement, world: WorldApi, S: Save) {
     save(S);
     toast(S.santa === 5 ? "Ачивка: ловец Санты! 🦌 Пять из пяти" : `${SANTA_LINES[S.santa % SANTA_LINES.length]} · поймано: ${S.santa}`);
   }
+
+  addEventListener("keydown", (e: KeyboardEvent) => {
+    if (tourAt < 0) return;
+    if (e.key === "Escape") endTour();
+    if (e.key === "ArrowRight") startTour(tourAt + 1);
+    if (e.key === "ArrowLeft") startTour(tourAt - 1);
+  });
 
   refresh();
   return {

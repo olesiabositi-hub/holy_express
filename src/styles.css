@@ -194,3 +194,61 @@ button { font: inherit; color: inherit; border: 0; background: none; cursor: poi
   .cars { bottom: 10px; }
   .car-btn { min-width: 172px; }
 }
+
+/* Шапка поверх модалок: звук и билет доступны всегда */
+.top { z-index: 20; }
+.modal-bg { z-index: 10; }
+.toast { z-index: 25; }
+.toast.click { pointer-events: auto; cursor: pointer; animation-duration: 5.1s; }
+.hero-banner .credit { margin-top: 8px; font-size: 14px; font-weight: 600; opacity: .9; }
+
+/* Боковая панель: пауза, прогулка, открытки */
+.rail { position: absolute; right: 18px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 8px; padding: 8px; background: rgba(8, 9, 11, 0.55); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 20px; }
+.rail-btn { display: flex; flex-direction: column; align-items: center; gap: 2px; width: 84px; padding: 10px 6px; border-radius: 14px; background: var(--card); font-size: 12px; font-weight: 700; position: relative; transition: background .15s; }
+.rail-btn:hover { background: var(--raised); }
+.rail-btn .i { font-size: 22px; line-height: 1.1; }
+.rail-btn.on { background: var(--yellow); color: var(--ink); }
+.rail-btn .cn { position: absolute; top: 4px; right: 4px; font-size: 10px; background: var(--green); color: #fff; border-radius: 8px; padding: 1px 5px; }
+
+/* Прогулка по поезду */
+.tour { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); width: min(560px, calc(100vw - 24px)); background: rgba(24, 25, 28, 0.94); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-radius: 24px; padding: 18px 20px; animation: fade .3s; }
+.tour-k { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.tour h3 { margin: 4px 0 6px; font-size: 24px; letter-spacing: -0.01em; }
+.tour p { margin: 0; font-size: 15px; line-height: 1.5; color: #d9dbdd; }
+.tour-who { display: flex; align-items: center; gap: 4px; margin-top: 10px; font-size: 26px; }
+.tour-who span { font-size: 13px; color: var(--muted); font-weight: 600; margin-left: 6px; }
+.tour-nav { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.tour-nav [data-n] { margin-left: auto; }
+.tour-nav .btn.primary { font-size: 15px; padding: 11px 16px; }
+.tour small { display: block; margin-top: 10px; color: var(--muted); font-size: 12px; }
+
+/* Открытки */
+.pc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.pcard { margin: 0; background: #f6f1e1; color: var(--ink); border-radius: 16px; padding: 8px; display: flex; flex-direction: column; gap: 8px; transform: rotate(-.6deg); box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+.pcard:nth-child(2n) { transform: rotate(.7deg); }
+.pc-img { aspect-ratio: 4 / 3; border-radius: 10px; background: linear-gradient(160deg, #10285e, #1a5a6a); background-size: cover; background-position: center; display: grid; place-items: center; font-size: 40px; color: #fff; position: relative; }
+.pc-stamp { position: absolute; right: 6px; bottom: 6px; width: 34px; height: 34px; border-radius: 8px; background: #fff; display: grid; place-items: center; font-size: 20px; border: 2px dashed #c9a24a; }
+.pc-stamp:empty { display: none; }
+.pcard figcaption b { display: block; font-size: 14px; }
+.pcard figcaption span { display: block; font-size: 12.5px; line-height: 1.4; color: #4a4a4a; margin-top: 3px; }
+.pcard.locked { opacity: .6; }
+
+@media (max-width: 860px) {
+  .rail { top: auto; bottom: 96px; right: 10px; transform: none; padding: 6px; gap: 6px; }
+  .rail-btn { width: 52px; padding: 8px 4px; }
+  .rail-btn .l { display: none; }
+  .tour { bottom: 10px; padding: 14px; }
+  .tour h3 { font-size: 20px; }
+}
+.tour-who img { width: 34px; height: 34px; object-fit: contain; }
+.pc-img > img { width: 64px; height: 64px; object-fit: contain; }
+.pc-stamp img { width: 24px; height: 24px; object-fit: contain; }
+/* модалка не заезжает под шапку */
+.modal-bg { padding-top: 84px; }
+.modal-bg .modal { max-height: calc(100vh - 100px); }
+@media (max-width: 860px) { .modal-bg { padding-top: 64px; } .modal-bg .modal { max-height: calc(100vh - 76px); } }
+.tour-nav { flex-wrap: nowrap; }
+@media (max-width: 860px) { .tour-nav { gap: 6px; } .tour-nav .btn, .tour-nav .btn.primary { padding: 10px 12px; font-size: 14px; } }
+.brand > div { min-width: 0; }
+.brand h1 { overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 480px) { .brand-flake { display: none; } .brand h1 { font-size: 15px; } }

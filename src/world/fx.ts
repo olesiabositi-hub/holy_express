@@ -134,8 +134,12 @@ export function makeSanta(scene: THREE.Scene) {
   let mixer: THREE.AnimationMixer | null = null;
   // Модель лежит как glTF-JSON со встроенными данными (так её отдаёт любой хостинг).
   // Собираем из неё GLB в памяти и разбираем без лишних запросов (data:-адреса могут быть запрещены политикой страницы).
-  fetch(`${import.meta.env.BASE_URL}models/santa.json`)
-    .then((r) => r.json())
+  // На закрытом паролем сайте модель лежит зашифрованной (scripts/protect.ts), ключ даёт экран входа.
+  const sealed = (window as unknown as { __kfOpen?: (u: string) => Promise<ArrayBuffer> }).__kfOpen;
+  (sealed
+    ? sealed(`${import.meta.env.BASE_URL}models/santa.enc`).then((b) => JSON.parse(new TextDecoder().decode(b)))
+    : fetch(`${import.meta.env.BASE_URL}models/santa.json`).then((r) => r.json())
+  )
     .then((json) => {
       const b64 = String(json.buffers[0].uri).split(",")[1];
       const bin = Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));

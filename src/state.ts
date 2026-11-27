@@ -15,11 +15,12 @@ export type Save = {
   santa: number;
   introSeen: boolean;
   finaleSeen: boolean;
+  cards: Record<string, number>; // открытки из окна: место → когда получена
 };
 
 const KEY = "kodfriz-express-v1";
 
-const fresh = (): Save => ({ v: 1, solved: {}, board: {}, marks: {}, notes: {}, hintAt: {}, tutorialSeen: false, ms: {}, hints: {}, santa: 0, introSeen: false, finaleSeen: false });
+const fresh = (): Save => ({ v: 1, solved: {}, board: {}, marks: {}, notes: {}, hintAt: {}, tutorialSeen: false, ms: {}, hints: {}, santa: 0, introSeen: false, finaleSeen: false, cards: {} });
 
 export function load(): Save {
   try {
@@ -40,8 +41,28 @@ export function save(s: Save) {
   }
 }
 
+// Фото к открыткам храним отдельно: они тяжелее, и если место кончится, прогресс не пострадает.
+const PHOTOS = "kodfriz-photos-v1";
+export function loadPhotos(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(PHOTOS) || "{}");
+  } catch {
+    return {};
+  }
+}
+export function savePhoto(name: string, url: string) {
+  const p = loadPhotos();
+  p[name] = url;
+  try {
+    localStorage.setItem(PHOTOS, JSON.stringify(p));
+  } catch {
+    /* переполнение — открытка останется без фото */
+  }
+}
+
 export function resetAll() {
   try {
+    localStorage.removeItem(PHOTOS);
     localStorage.removeItem(KEY);
   } catch {
     /* ничего */

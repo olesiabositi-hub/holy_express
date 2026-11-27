@@ -16,6 +16,7 @@ import { fmtTime, isOpen, save, type Save } from "../state";
 import { ticketSvg } from "./ticket";
 import { howToPlay, tutorial } from "./howto";
 import { emo } from "./emo";
+import { onSound, toggleSound } from "../audio";
 
 export type PanelHost = {
   root: HTMLElement;
@@ -66,6 +67,7 @@ export function openCase(host: PanelHost, index: number) {
     snow.stop();
     scene.remove();
     removeEventListener("keydown", onKey);
+    offSound();
     host.close();
   };
   const onKey = (e: KeyboardEvent) => {
@@ -79,8 +81,15 @@ export function openCase(host: PanelHost, index: number) {
   head.innerHTML = `<button class="cs-back" aria-label="Выйти из вагона">← В поезд</button>
     <div class="cs-title"><span>Дело №${c.num} · ${c.wagon}</span><b>${isOpen(index) ? c.title : "Вагон пока закрыт"}</b></div>
     <div class="cs-timer" aria-label="Время">0:00</div>
+    <button class="cs-sound" aria-label="Звук"></button>
     <button class="cs-how">Как играть</button>`;
   scene.appendChild(head);
+  const soundBtn = head.querySelector<HTMLButtonElement>(".cs-sound")!;
+  const offSound = onSound((on) => {
+    soundBtn.textContent = on ? "🔊" : "🔇";
+    soundBtn.title = on ? "Выключить звук (M)" : "Включить звук (M)";
+  });
+  soundBtn.onclick = () => toggleSound();
   head.querySelector<HTMLButtonElement>(".cs-back")!.onclick = finish;
   head.querySelector<HTMLButtonElement>(".cs-how")!.onclick = () => howToPlay(scene);
 

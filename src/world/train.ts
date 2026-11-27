@@ -119,7 +119,108 @@ function interior(kind: number, len: number, w: number, y0: number) {
       g.add(candle);
     }
   }
+  details(g, kind, len, w, y0);
   return g;
+}
+
+/** Мелочи, ради которых хочется заглянуть внутрь: чай в подстаканниках, мандарины, самовар, ёлочка. */
+function details(g: THREE.Group, kind: number, len: number, w: number, y0: number) {
+  const brass = std("#c9a24a", { metalness: 0.85, roughness: 0.3 });
+  const tea = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 0.7, 0.18) });
+  const orange = std("#ff8a1c", { roughness: 0.6, emissive: "#ff6a00", emissiveIntensity: 0.25 });
+  const leaf = std("#2f7a3a");
+  const glass = (x: number, z: number) => {
+    // стакан в подстаканнике — без него поезд не поезд
+    const holder = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.13, 12), brass);
+    holder.position.set(x, y0 + 0.85, z);
+    g.add(holder);
+    const t = new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.1, 12), tea);
+    t.position.set(x, y0 + 0.93, z);
+    g.add(t);
+    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.012, 6, 12, Math.PI), brass);
+    handle.rotation.z = -Math.PI / 2;
+    handle.position.set(x + 0.08, y0 + 0.86, z);
+    g.add(handle);
+  };
+  const mandarins = (x: number, z: number, n = 3) => {
+    for (let i = 0; i < n; i++) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), orange);
+      m.scale.y = 0.85;
+      m.position.set(x + (i % 2) * 0.13 - 0.06, y0 + 0.84 + (i === 2 ? 0.08 : 0), z + (i === 1 ? 0.1 : 0));
+      g.add(m);
+      if (i === 0) {
+        const l = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 4), leaf);
+        l.scale.set(1.4, 0.3, 0.7);
+        l.position.set(m.position.x, m.position.y + 0.07, m.position.z);
+        g.add(l);
+      }
+    }
+  };
+  const lamp = (x: number, z: number) => {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 2.1, 1) }));
+    b.position.set(x, y0 + 2.15, z);
+    g.add(b);
+  };
+  const n = 4;
+  for (let i = 0; i < n; i++) {
+    const x = -len / 2 + 1.3 + i * ((len - 2.6) / (n - 1));
+    if (kind === 1 || kind === 2) {
+      glass(x - 0.12, -1.0);
+      if (i % 2 === 0) mandarins(x + 0.15, -1.08, 2);
+      lamp(x + 0.95, -w / 2 + 0.25);
+    } else if (kind === 3) {
+      glass(x + 0.2, -0.6);
+      glass(x - 0.2, 0.9);
+      mandarins(x + 0.15, 0.6);
+    } else if (kind === 0) {
+      // мигающие огоньки серверов
+      for (let k = 0; k < 3; k++) {
+        const led = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.02), new THREE.MeshBasicMaterial({ color: k === 1 ? new THREE.Color(3, 0.6, 0.3) : new THREE.Color(0.4, 3, 0.6) }));
+        led.position.set(x - 0.6, y0 + 1.2 + k * 0.22, 0.9 - 0.26);
+        led.userData.blink = i * 3 + k;
+        g.add(led);
+      }
+    }
+  }
+  if (kind === 3) {
+    // самовар на буфете и ёлочка в углу ресторана
+    g.add(box(1.2, 0.9, 0.7, std("#5a3420", { roughness: 0.8 }), len / 2 - 0.8, y0 + 0.45, -w / 2 + 0.5));
+    const sam = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.32, 16, 12), brass);
+    body.scale.y = 1.25;
+    body.position.y = 0.4;
+    sam.add(body);
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.14, 0.25, 12), brass);
+    neck.position.y = 0.88;
+    sam.add(neck);
+    const pot = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 8), std("#f2ede4"));
+    pot.position.y = 1.08;
+    sam.add(pot);
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.26, 0.12, 12), brass);
+    sam.add(foot);
+    sam.position.set(len / 2 - 0.8, y0 + 0.9, -w / 2 + 0.5);
+    g.add(sam);
+    const fir = new THREE.Group();
+    for (let i = 0; i < 3; i++) {
+      const c = new THREE.Mesh(new THREE.ConeGeometry(0.5 - i * 0.13, 0.6, 8), std("#1f5a3c", { flatShading: true }));
+      c.position.y = 0.35 + i * 0.35;
+      fir.add(c);
+    }
+    const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.1), new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 2.4, 0.6) }));
+    star.position.y = 1.35;
+    fir.add(star);
+    const cols = [new THREE.Color(3, 0.5, 0.4), new THREE.Color(3, 2.4, 0.6), new THREE.Color(0.8, 1.6, 3)];
+    for (let i = 0; i < 9; i++) {
+      const a = i * 2.1;
+      const y = 0.25 + (i / 9) * 0.95;
+      const r = 0.42 * (1 - y / 1.4);
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 4), new THREE.MeshBasicMaterial({ color: cols[i % 3] }));
+      b.position.set(Math.cos(a) * r, y, Math.sin(a) * r);
+      fir.add(b);
+    }
+    fir.position.set(-len / 2 + 0.6, y0 + 0.05, w / 2 - 0.55);
+    g.add(fir);
+  }
 }
 
 export function makeTrain(scene: THREE.Scene) {
@@ -411,6 +512,8 @@ export function makeTrain(scene: THREE.Scene) {
   const chimneyWorld = new THREE.Vector3(front - 1.1, 5.25, 0);
   let gt = 0;
   const rods = loco.children.filter((c) => c.userData.rod);
+  const leds: THREE.Object3D[] = [];
+  train.traverse((o) => o.userData.blink !== undefined && leds.push(o));
 
   return {
     group: train,
@@ -442,6 +545,7 @@ export function makeTrain(scene: THREE.Scene) {
       gt += dt;
       if (gt > 0.08) {
         garland.twinkle(t);
+        for (const l of leds) l.visible = Math.sin(t * (2 + (l.userData.blink % 3)) + l.userData.blink * 1.7) > -0.4;
         gt = 0;
       }
       flake.rotation.x = Math.sin(t * 0.4) * 0.05;

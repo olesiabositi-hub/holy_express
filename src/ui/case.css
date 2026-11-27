@@ -218,3 +218,8 @@ img.e { width: 1.25em; height: 1.25em; object-fit: contain; display: block; poin
 .drag-ghost img.e { width: 1.2em; height: 1.2em; }
 .hero-emo { display: flex; gap: 6px; margin-top: 10px; }
 .hero-emo img.e { width: 44px; height: 44px; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, .3)); }
+
+/* Шапка дела остаётся поверх обучения и справки — звук можно выключить всегда */
+.case-scene > .cs-head { z-index: 45; }
+.cs-sound { background: var(--raised); border-radius: 12px; padding: 9px 12px; font-size: 16px; }
+.cs-sound:hover { background: var(--sunken); }

@@ -640,6 +640,189 @@ function canyon(glow: THREE.Texture, lightMat: THREE.Material) {
 }
 
 // ---------------------------------------------------------------------------
+// Придорожное кафе «Калитки»: бревенчатая изба с наличниками, самовар на крыльце
+// и большая калитка-вывеска (карельский открытый пирожок из ржаного теста).
+
+function kalitka(k: number) {
+  const g = new THREE.Group();
+  const crust = std("#8a5a2e", { roughness: 0.9 });
+  const fill = std("#f2c14e", { roughness: 0.7, emissive: "#7a4a00", emissiveIntensity: 0.25 });
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(k, k, 0.22 * k, 28), crust);
+  base.scale.set(1.45, 1, 1);
+  g.add(base);
+  // защипы по краю
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.2 * k, 8, 6), crust);
+    p.scale.set(1, 0.7, 1);
+    p.position.set(Math.cos(a) * 1.4 * k * 0.86, 0.08 * k, Math.sin(a) * k * 0.86);
+    g.add(p);
+  }
+  const f = new THREE.Mesh(new THREE.CylinderGeometry(0.66 * k, 0.66 * k, 0.24 * k, 24), fill);
+  f.scale.set(1.45, 1, 1);
+  f.position.y = 0.06 * k;
+  g.add(f);
+  // румяные пятнышки на начинке
+  for (let i = 0; i < 6; i++) {
+    const d = new THREE.Mesh(new THREE.SphereGeometry(0.09 * k, 6, 4), std("#c9872c"));
+    d.scale.y = 0.3;
+    d.position.set((rnd() - 0.5) * 1.3 * k, 0.19 * k, (rnd() - 0.5) * 0.8 * k);
+    g.add(d);
+  }
+  return g;
+}
+
+function karelianCafe(glow: THREE.Texture, lightMat: THREE.Material) {
+  const g = new THREE.Group();
+  const W = 13, D = 7, H = 4.4;
+  const house = new THREE.Group();
+  house.position.set(0, 0, -21);
+  g.add(house);
+  const logMat = std("#8b5a35", { roughness: 0.95 });
+  const logDark = std("#6e4428", { roughness: 0.95 });
+  house.add(box(W - 0.4, H, D - 0.4, logDark, 0, H / 2, 0));
+  // брёвна: по фасаду и бокам, с торцами на углах
+  for (let y = 0.25, i = 0; y < H; y += 0.5, i++) {
+    const m = i % 2 ? logMat : logDark;
+    const front = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, W + 0.6, 10).rotateZ(Math.PI / 2), m);
+    front.position.set(0, y, D / 2 - 0.1);
+    house.add(front);
+    for (const sx of [-1, 1]) {
+      const side = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.26, D + 0.6, 10).rotateX(Math.PI / 2), m);
+      side.position.set(sx * (W / 2 - 0.1), y + 0.25, 0);
+      house.add(side);
+    }
+  }
+  // двускатная крыша под снегом
+  const rs = new THREE.Shape();
+  rs.moveTo(-D / 2 - 1, 0);
+  rs.lineTo(D / 2 + 1, 0);
+  rs.lineTo(0, 3.4);
+  rs.closePath();
+  const roof = new THREE.Mesh(new THREE.ExtrudeGeometry(rs, { depth: W + 1.4, bevelEnabled: false }).translate(0, 0, -(W + 1.4) / 2).rotateY(Math.PI / 2), std("#7a2a24"));
+  roof.position.y = H;
+  house.add(roof);
+  const snowRoof = new THREE.Mesh(new THREE.ExtrudeGeometry(rs, { depth: W + 1.6, bevelEnabled: false }).translate(0, 0, -(W + 1.6) / 2).rotateY(Math.PI / 2), SNOW);
+  snowRoof.scale.set(1.02, 0.96, 1.02);
+  snowRoof.position.y = H + 0.35;
+  house.add(snowRoof);
+  // печная труба и дымок
+  house.add(box(0.9, 2.2, 0.9, std("#9a5a48"), 3.4, H + 2.6, -0.8));
+  house.add(box(1.0, 0.25, 1.0, SNOW, 3.4, H + 3.75, -0.8));
+  const puffs: THREE.Mesh[] = [];
+  const smokeMat = new THREE.MeshStandardMaterial({ color: "#d8dde8", transparent: true, opacity: 0.45, depthWrite: false, roughness: 1 });
+  for (let i = 0; i < 6; i++) {
+    const p = new THREE.Mesh(new THREE.SphereGeometry(0.6, 10, 8), smokeMat);
+    p.userData.k = i / 6;
+    house.add(p);
+    puffs.push(p);
+  }
+  // окна с резными белыми наличниками
+  const warm = WARM();
+  const white = std("#f4efe4");
+  for (const x of [-4.4, -1.9, 3.2]) {
+    const w = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 1.5), warm);
+    w.position.set(x, 2.3, D / 2 + 0.2);
+    house.add(w);
+    house.add(box(1.7, 0.16, 0.12, white, x, 1.48, D / 2 + 0.22));
+    house.add(box(0.14, 1.7, 0.12, white, x - 0.72, 2.3, D / 2 + 0.22));
+    house.add(box(0.14, 1.7, 0.12, white, x + 0.72, 2.3, D / 2 + 0.22));
+    const cap = new THREE.Shape();
+    cap.moveTo(-0.95, 0);
+    cap.lineTo(0.95, 0);
+    cap.lineTo(0, 0.55);
+    cap.closePath();
+    const c = new THREE.Mesh(new THREE.ExtrudeGeometry(cap, { depth: 0.12, bevelEnabled: false }), white);
+    c.position.set(x, 3.12, D / 2 + 0.16);
+    house.add(c);
+  }
+  // дверь, крыльцо
+  const door = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 2.4), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 1.3, 0.6) }));
+  door.position.set(0.65, 1.5, D / 2 + 0.21);
+  house.add(door);
+  house.add(box(3, 0.3, 1.8, logMat, 0.65, 0.15, D / 2 + 1));
+  house.add(box(3, 0.08, 1.8, SNOW, 0.65, 0.34, D / 2 + 1));
+  // вывеска над дверью
+  const sign = canvasTex(1024, 300, (c) => {
+    c.fillStyle = "#5a3520";
+    c.beginPath();
+    c.roundRect(6, 6, 1012, 288, 40);
+    c.fill();
+    c.strokeStyle = "#e8c98a";
+    c.lineWidth = 10;
+    c.stroke();
+    c.fillStyle = "#fbe7bd";
+    c.textAlign = "center";
+    c.font = "800 150px 'Golos Text', system-ui, sans-serif";
+    c.fillText("КАЛИТКИ", 512, 160);
+    c.font = "600 58px 'Golos Text', system-ui, sans-serif";
+    c.fillText("кафе · чай из самовара", 512, 248);
+  });
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(5.4, 1.6), new THREE.MeshBasicMaterial({ map: sign, color: new THREE.Color(1.25, 1.2, 1.15) }));
+  board.position.set(-1.2, H + 1.1, D / 2 + 0.75);
+  house.add(board);
+  // большая калитка-символ на коньке крыши — её видно издалека
+  const big = kalitka(1.5);
+  big.rotation.x = Math.PI / 2 - 0.12;
+  big.position.set(-2.6, H + 3.4 + 1.45, 0.2);
+  house.add(big);
+  house.add(box(0.16, 1.2, 0.16, std("#2b2f36", { metalness: 0.6 }), -2.6, H + 3.6, 0.2));
+  // столик на улице: самовар и тарелка калиток
+  const table = new THREE.Group();
+  table.position.set(4.6, 0, D / 2 + 2.6);
+  house.add(table);
+  table.add(box(2.4, 0.12, 1.4, logMat, 0, 1.0, 0));
+  for (const [x, z] of [[-1, -0.55], [1, -0.55], [-1, 0.55], [1, 0.55]]) table.add(box(0.12, 1.0, 0.12, logDark, x, 0.5, z));
+  table.add(box(2.4, 0.06, 1.4, SNOW, 0, 1.09, 0));
+  const brass = std("#c9a24a", { metalness: 0.85, roughness: 0.3 });
+  const sam = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 12), brass);
+  sam.scale.y = 1.3;
+  sam.position.set(-0.5, 1.68, 0);
+  table.add(sam);
+  const samTop = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 0.35, 12), brass);
+  samTop.position.set(-0.5, 2.3, 0);
+  table.add(samTop);
+  const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.42, 0.06, 20), std("#f4efe4"));
+  plate.position.set(0.6, 1.16, 0);
+  table.add(plate);
+  for (let i = 0; i < 3; i++) {
+    const k = kalitka(0.16);
+    k.position.set(0.45 + (i % 2) * 0.3, 1.22 + i * 0.04, -0.12 + i * 0.12);
+    k.rotation.y = i;
+    table.add(k);
+  }
+  for (const x of [-1.4, 1.4]) table.add(box(0.5, 0.5, 1.2, logMat, x * 1.25, 0.25, 0));
+  // фонари, ёлочка с огоньками, гирлянда по свесу крыши
+  for (const x of [-8.6, 8.6]) {
+    const l = lampPost(glow, 4);
+    l.position.set(x, 0, D / 2 + 1.2);
+    house.add(l);
+  }
+  const fir = pine(1.3);
+  fir.position.set(9.5, 0, -2);
+  house.add(fir);
+  const eave = swag(new THREE.Vector3(-W / 2 - 0.5, H + 0.2, D / 2 + 1.05), new THREE.Vector3(W / 2 + 0.5, H + 0.2, D / 2 + 1.05), 0.5, 0.4);
+  const lt = lights(eave, lightMat);
+  house.add(lt);
+  const label = mapLabel("Кафе «Калитки»", "карельские пирожки");
+  label.scale.multiplyScalar(0.7);
+  label.position.set(0, H + 8.5, 0);
+  house.add(label);
+  return {
+    g,
+    update(t: number) {
+      for (const p of puffs) {
+        const k = (p.userData.k + t * 0.12) % 1;
+        p.position.set(3.4 + k * 2.2, H + 4 + k * 5, -0.8 - k * 1.2);
+        p.scale.setScalar(0.5 + k * 1.6);
+        (p.material as THREE.MeshStandardMaterial).opacity = 0.45;
+      }
+      big.rotation.z = Math.sin(t * 1.4) * 0.08;
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
 
 type Clear = [number, number, number, number]; // x0, x1, z0, z1 в координатах места
 type Landmark = { name: string; at: number; obj: THREE.Group; clears: Clear[]; update?: (t: number) => void };
@@ -658,6 +841,8 @@ export function makeJourney(scene: THREE.Scene, glow: THREE.Texture, lightMat: T
   add("Крепость Корела", STOPS[2].at - 60, korela(glow, lightMat), [[-50, 50, -86, -14]]);
   add("Приозерск", STOPS[2].at, stationStop("Приозерск", glow, lightMat, 1, true), [[-24, 24, 2, 18]]);
   add("Лахденпохья", STOPS[3].at, stationStop("Лахденпохья", glow, lightMat, 1), [[-24, 24, 2, 18]]);
+  const cafe = karelianCafe(glow, lightMat);
+  add("Кафе «Калитки»", STOPS[3].at + 150, cafe.g, [[-22, 22, -34, -8]], cafe.update);
   add("Ладожские шхеры", STOPS[3].at + 520, skerries(lightMat), [[-460, 460, -430, -20]]);
   add("Сортавала", STOPS[4].at, sortavala(glow, lightMat), [[-70, 70, -46, -2], [-24, 24, 2, 18]]);
   add("Рускеальские водопады", STOPS[5].at - 520, waterfalls(lightMat), [[-22, 22, 8, 100]]);
@@ -679,7 +864,10 @@ export function makeJourney(scene: THREE.Scene, glow: THREE.Texture, lightMat: T
     let next = STOPS[1];
     for (let i = 0; i < STOPS.length; i++) if (pos >= STOPS[i].at) [cur, next] = [STOPS[i], STOPS[i + 1] ?? STOPS[0]];
     const here = L.find((l) => Math.abs(near(l.at)) < 75);
-    return { from: cur.name, to: next.name, here: here?.name ?? null };
+    // самое близкое место и расстояние до него — по нему снимаем открытку
+    let best: Landmark | null = null;
+    for (const l of L) if (!best || Math.abs(near(l.at)) < Math.abs(near(best.at))) best = l;
+    return { from: cur.name, to: next.name, here: here?.name ?? null, closest: best!.name, closestD: near(best!.at) };
   };
 
   return {

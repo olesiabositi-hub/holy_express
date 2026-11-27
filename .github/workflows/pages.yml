@@ -23,6 +23,22 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run test
       - run: bun run build
+      # Вход по паролю: задай секрет SITE_PASSWORD (Settings → Secrets → Actions). Пусто — сайт открыт.
+      - run: bun run protect
+        env:
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+      # Зеркало в России: Yandex Object Storage. Работает, когда заданы секреты YC_BUCKET, YC_KEY_ID, YC_SECRET.
+      - name: Зеркало в Yandex Object Storage
+        if: env.YC_BUCKET != ''
+        env:
+          YC_BUCKET: ${{ secrets.YC_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.YC_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SECRET }}
+          AWS_DEFAULT_REGION: ru-central1
+        run: |
+          aws s3 sync dist "s3://$YC_BUCKET" --delete --endpoint-url https://storage.yandexcloud.net --exclude "index.html"
+          aws s3 cp dist/index.html "s3://$YC_BUCKET/index.html" --endpoint-url https://storage.yandexcloud.net --cache-control "no-cache" --content-type "text/html; charset=utf-8"
+          echo "Зеркало: https://$YC_BUCKET.website.yandexcloud.net/"
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -1,0 +1,15 @@
+# Для корпоративного GitLab (если там включены Pages): та же сборка, что и на GitHub.
+# Пароль — переменная CI/CD SITE_PASSWORD (Masked). Пусто — сайт открыт.
+image: oven/bun:1
+
+pages:
+  script:
+    - bun install --frozen-lockfile
+    - bun run test
+    - bun run build
+    - bun run protect
+    - mv dist public
+  artifacts:
+    paths: [public]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

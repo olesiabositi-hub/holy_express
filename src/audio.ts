@@ -40,6 +40,15 @@ export function unlockAudio() {
 
 export const soundOn = () => enabled;
 
+// Кнопки звука живут в нескольких местах (шапка, экран дела) — держим их в одном состоянии.
+const listeners = new Set<(on: boolean) => void>();
+export function onSound(cb: (on: boolean) => void) {
+  listeners.add(cb);
+  cb(enabled);
+  return () => listeners.delete(cb);
+}
+export const toggleSound = () => setSound(!enabled);
+
 export function setSound(on: boolean) {
   enabled = on;
   try {
@@ -49,6 +58,7 @@ export function setSound(on: boolean) {
   }
   if (on) unlockAudio();
   if (master && ctx) master.gain.setTargetAtTime(on ? 0.55 : 0, ctx.currentTime, 0.1);
+  listeners.forEach((cb) => cb(on));
 }
 
 function noiseBuffer(c: AudioContext, sec: number) {

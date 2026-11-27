@@ -12,6 +12,8 @@ import { makeJourney, STOPS } from "./landmarks";
 import { makeTrain } from "./train";
 import { makeFinaleTree, makeReindeer, makeSanta, makeSnow, makeSteam } from "./fx";
 import { setTrainMoving, whistle } from "../audio";
+import { CASES } from "../story/cases";
+import { hero } from "../story/heroes";
 
 export type Tier = 0 | 1 | 2;
 
@@ -72,6 +74,37 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
   };
   let festPrev = scenery.festiveX();
 
+  // Герои дела сидят в своём вагоне: их видно, когда поднимается крыша (прогулка по поезду, дело).
+  const emoTex = new Map<string, THREE.Texture>();
+  const texLoader = new THREE.TextureLoader();
+  const emoji = (name: string) => {
+    let t = emoTex.get(name);
+    if (!t) {
+      t = texLoader.load(`emoji/${name}.webp`);
+      t.colorSpace = THREE.SRGBColorSpace;
+      emoTex.set(name, t);
+    }
+    return t;
+  };
+  const riders: { car: (typeof train.cars)[number]; sp: THREE.Sprite; y: number; ph: number }[] = [];
+  for (let ci = 0; ci < 4; ci++) {
+    const car = train.carByCase(ci);
+    const ids = CASES[ci].suspects;
+    ids.forEach((id, k) => {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: emoji(hero(id).img), transparent: true, depthWrite: false, fog: false }));
+      sp.scale.setScalar(1.05);
+      const x = -car.len / 2 + 1.4 + (k * (car.len - 2.8)) / Math.max(1, ids.length - 1);
+      const y = 2.9;
+      sp.position.set(x, y, k % 2 ? 0.45 : -0.35);
+      sp.visible = false;
+      car.group.add(sp);
+      riders.push({ car, sp, y, ph: k * 1.3 + ci });
+    });
+  }
+  let paused = false;
+  let wantShot: ((url: string) => void) | null = null;
+  const shotCanvas = document.createElement("canvas");
+
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(new THREE.Vector2(container.clientWidth, container.clientHeight), 0.6, 0.5, 0.9);
@@ -114,7 +147,7 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
   };
   if (!skipIntro) fly(HUB_POS.clone(), new THREE.Vector3(-2, 7, 0), reduceMotion ? 0.01 : 5.5, () => (controls.enabled = true));
 
-  let mode: "hub" | "focus" | "finale" = "hub";
+  let mode: "hub" | "focus" | "finale" | "tour" = "hub";
   let focused = -1;
   let speed = 11;
   let speedTarget = 11;
@@ -187,7 +220,9 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
     clock.update();
     const dt = Math.min(clock.getDelta(), 0.05);
     const t = clock.getElapsed();
-    speed += (speedTarget - speed) * Math.min(1, dt * 0.5);
+    const target = paused ? 0 : speedTarget;
+    speed += (target - speed) * Math.min(1, dt * (paused ? 0.9 : 0.5));
+    if (speed < 0.02 && target === 0) speed = 0;
     const dx = speed * dt;
     travelled += dx;
     journey.update(dx, t);
@@ -207,6 +242,10 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
       if (ahead <= 60 && ahead > 60 - dx - 0.001 && speed > 2) toot();
     }
     train.update(dt, t, speed);
+    for (const r of riders) {
+      r.sp.visible = r.car.open > 0.35 && !r.car.locked;
+      if (r.sp.visible) r.sp.position.y = r.y + Math.abs(Math.sin(t * 2.2 + r.ph)) * 0.18;
+    }
     steam.update(dt, speed);
     snow.update(t, travelled, tmp.set(camera.position.x * 0.5, 0, camera.position.z * 0.4));
     santa.update(dt, t, mode !== "focus" && !reduceMotion);
@@ -236,6 +275,21 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
 
     if (useBloom) composer.render();
     else renderer.render(scene, camera);
+    if (wantShot) {
+      // кадр для открытки: читаем холст сразу после отрисовки, пока буфер не очищен
+      const cb = wantShot;
+      wantShot = null;
+      try {
+        const src = renderer.domElement;
+        const w = 560, h = Math.round((w * src.height) / src.width);
+        shotCanvas.width = w;
+        shotCanvas.height = h;
+        shotCanvas.getContext("2d")!.drawImage(src, 0, 0, w, h);
+        cb(shotCanvas.toDataURL("image/jpeg", 0.72));
+      } catch {
+        /* без фото — открытка всё равно будет */
+      }
+    }
 
     if (!fpsChecked && t > 2) {
       fpsAcc += dt;
@@ -267,6 +321,7 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
     },
     focus(caseIndex: number, onArrive: () => void) {
       mode = "focus";
+      controls.minDistance = 28;
       focused = caseIndex;
       hovered = null;
       events.hover(null);
@@ -313,13 +368,60 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
     leaveFinale() {
       mode = "hub";
       speedTarget = 11;
-      setTrainMoving(true);
+      setTrainMoving(!paused);
       journey.finaleMode(false);
       controls.minDistance = 28;
       hubFor();
       fly(HUB_POS.clone(), new THREE.Vector3(-2, 7, 0), 2.2, () => (controls.enabled = true));
     },
     toot,
+    /** Пауза: поезд плавно тормозит и стоит, мир замирает рядом. Снег идёт. */
+    setPaused(p: boolean) {
+      paused = p;
+      setTrainMoving(!p && mode !== "finale");
+    },
+    get paused() {
+      return paused;
+    },
+    /** Прогулка по поезду: камера подлетает к вагону, крыша поднимается (если вагон открыт). */
+    tour(caseIndex: number) {
+      mode = "tour";
+      hovered = null;
+      events.hover(null);
+      train.cars.forEach((c) => {
+        c.hoverTarget = 0;
+        c.openTarget = c.caseIndex === caseIndex && !c.locked ? 1 : 0;
+      });
+      focused = caseIndex;
+      const c = train.carByCase(caseIndex);
+      controls.autoRotate = false;
+      const loco = caseIndex === 4;
+      const tx = loco ? c.x - 3 : c.x;
+      const narrow = container.clientWidth / container.clientHeight < 1;
+      // почти сверху и чуть сбоку: видно и обстановку, и тех, кто едет
+      // на вертикальном экране отходим дальше: вагон должен влезть по ширине
+      const pos = narrow ? new THREE.Vector3(tx - 1, loco ? 20 : 24, 15) : new THREE.Vector3(tx - 1.5, loco ? 13 : 16, 7.5);
+      const tgt = new THREE.Vector3(tx, loco ? 2.8 : 1.6, narrow ? 2.5 : 1.2);
+      controls.minDistance = 6;
+      fly(pos, tgt, shot ? 1.1 : 1.5, () => {
+        controls.enabled = true;
+        controls.target.copy(tgt);
+      });
+    },
+    endTour() {
+      train.cars.forEach((c) => (c.openTarget = 0));
+      focused = -1;
+      controls.minDistance = 28;
+      fly(HUB_POS.clone(), new THREE.Vector3(-2, 7, 0), 1.6, () => {
+        mode = "hub";
+        controls.enabled = true;
+        controls.autoRotate = !reduceMotion;
+      });
+    },
+    /** Снимок сцены для открытки (JPEG data URL). */
+    snapshot(cb: (url: string) => void) {
+      wantShot = cb;
+    },
     route: () => journey.status(),
     get mode() {
       return mode;
