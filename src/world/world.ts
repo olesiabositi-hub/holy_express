@@ -101,6 +101,21 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
       riders.push({ car, sp, y, ph: k * 1.3 + ci });
     });
   }
+  // в паровозе: двое на сиденьях, один у выхода к тендеру, трое на угле в тендере (координаты паровоза)
+  {
+    const car = train.carByCase(4);
+    // порядок перемешан, чтобы место у кнопки «ДЕПЛОЙ» ничего не подсказывало
+    const spots: [number, number, number][] = [[-5.7, 4.75, 0.2], [-3.15, 3.25, -0.85], [-6.3, 4.55, -0.6], [-3.15, 3.25, 0.85], [-5.1, 4.55, -0.9], [-3.75, 3.05, 0.35]];
+    CASES[4].suspects.slice(0, spots.length).forEach((id, k) => {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: emoji(hero(id).img), transparent: true, depthWrite: false, fog: false }));
+      sp.scale.setScalar(0.85);
+      const [x, y, z] = spots[k];
+      sp.position.set(x, y, z);
+      sp.visible = false;
+      car.group.add(sp);
+      riders.push({ car, sp, y, ph: k * 1.1 });
+    });
+  }
   let paused = false;
   let wantShot: ((url: string) => void) | null = null;
   const shotCanvas = document.createElement("canvas");
@@ -396,12 +411,18 @@ export function createWorld(container: HTMLElement, events: WorldEvents) {
       const c = train.carByCase(caseIndex);
       controls.autoRotate = false;
       const loco = caseIndex === 4;
-      const tx = loco ? c.x - 3 : c.x;
+      const tx = c.x;
       const narrow = container.clientWidth / container.clientHeight < 1;
       // почти сверху и чуть сбоку: видно и обстановку, и тех, кто едет
       // на вертикальном экране отходим дальше: вагон должен влезть по ширине
-      const pos = narrow ? new THREE.Vector3(tx - 1, loco ? 20 : 24, 15) : new THREE.Vector3(tx - 1.5, loco ? 13 : 16, 7.5);
-      const tgt = new THREE.Vector3(tx, loco ? 2.8 : 1.6, narrow ? 2.5 : 1.2);
+      let pos = narrow ? new THREE.Vector3(tx - 1, 24, 15) : new THREE.Vector3(tx - 1.5, 16, 7.5);
+      let tgt = new THREE.Vector3(tx, 1.6, narrow ? 2.5 : 1.2);
+      if (loco) {
+        // в будку машиниста заглядываем сверху со стороны тендера: видно топку, манометры и кнопку
+        const cab = c.x - 2.6;
+        pos = narrow ? new THREE.Vector3(cab - 3.4, 16, 5.2) : new THREE.Vector3(cab - 2.8, 10.6, 3.2);
+        tgt = new THREE.Vector3(cab - 0.1, 1.5, narrow ? 2.4 : 1.6);
+      }
       controls.minDistance = 6;
       fly(pos, tgt, shot ? 1.1 : 1.5, () => {
         controls.enabled = true;

@@ -1,7 +1,7 @@
 // Ретро-состав: тёмно-зелёный паровоз с красным низом и неоновой снежинкой, вагоны в гирляндах.
 // Поезд смотрит в +X и стоит на месте: едет мир.
 import * as THREE from "three";
-import { beamTex, softDot, warmSpill } from "./tex";
+import { beamTex, canvasTex, softDot, warmSpill } from "./tex";
 
 const GREEN = "#2b6b4d";
 const RED = "#a3262b";
@@ -443,7 +443,8 @@ export function makeTrain(scene: THREE.Scene) {
     fw.position.set(1.31, 3.7, z);
     cab.add(fw);
   }
-  cab.add(interiorCab());
+  const cabInside = interiorCab();
+  cab.add(cabInside.g);
   const cabLid = new THREE.Group();
   cabLid.position.y = 4.45;
   const cabRoof = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.6, 3.0, 24).rotateZ(Math.PI / 2), std("#2a2d33"));
@@ -537,7 +538,7 @@ export function makeTrain(scene: THREE.Scene) {
         c.lid.position.y = (c.caseIndex === 4 ? 4.45 : Y0 + H) + o * 3.2;
         c.lid.rotation.x = o * 0.35;
         c.lid.position.z = -o * 0.9;
-        c.inside.intensity = o * 18;
+        c.inside.intensity = o * (c.caseIndex === 4 ? 7 : 18);
         c.paint.emissive.set("#19AA1E");
         c.paint.emissiveIntensity = c.hover * 0.35;
         c.lockMat.color.copy(WARM).multiplyScalar(c.locked ? 0.25 : 1);
@@ -545,6 +546,7 @@ export function makeTrain(scene: THREE.Scene) {
       gt += dt;
       if (gt > 0.08) {
         garland.twinkle(t);
+        cabInside.update(t);
         for (const l of leds) l.visible = Math.sin(t * (2 + (l.userData.blink % 3)) + l.userData.blink * 1.7) > -0.4;
         gt = 0;
       }
@@ -556,21 +558,225 @@ export function makeTrain(scene: THREE.Scene) {
   };
 }
 
+/**
+ * Будка машиниста изнутри: задняя стенка котла с топкой, манометры, водомерное стекло,
+ * регулятор, колесо реверса, кран тормоза, медные трубки, лопата и уголь, два сиденья,
+ * фонарь, гирлянда, чай в подстаканнике, часы на 23:59 и красная кнопка «ДЕПЛОЙ» под колпаком.
+ * Координаты будки: пол y≈1.5, котёл впереди (+x), тендер сзади (−x).
+ */
 function interiorCab() {
   const g = new THREE.Group();
-  const panel = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.2, 2.0), std("#3a3f48", { metalness: 0.5 }));
-  panel.position.set(1.0, 2.2, 0);
-  g.add(panel);
-  for (let i = 0; i < 5; i++) {
-    const gauge = new THREE.Mesh(new THREE.CircleGeometry(0.1, 16).rotateY(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: new THREE.Color(2.2, 2.0, 1.4) }));
-    gauge.position.set(0.74, 2.5, -0.8 + i * 0.4);
-    g.add(gauge);
+  const F = 1.52; // пол
+  const iron = std("#24272d", { metalness: 0.6, roughness: 0.45 });
+  const brass = std("#c9a24a", { metalness: 0.9, roughness: 0.25 });
+  const copper = std("#b8643a", { metalness: 0.85, roughness: 0.3 });
+  const wood = std("#6b4128", { roughness: 0.8 });
+  const red = std("#a3262b", { roughness: 0.5 });
+  const cushion = std("#7a2430", { roughness: 0.9 });
+  const add = <T extends THREE.Object3D>(o: T, x: number, y: number, z: number) => {
+    o.position.set(x, y, z);
+    g.add(o);
+    return o;
+  };
+
+  // дощатый пол
+  for (let i = 0; i < 6; i++) add(box(2.4, 0.05, 0.4, std(i % 2 ? "#5a3822" : "#4e301d", { roughness: 0.95 }), 0, F, -1.0 + i * 0.4), 0, F, -1.0 + i * 0.4);
+
+  // задняя стенка котла: тёмный полукруг с латунным ободом
+  add(new THREE.Mesh(new THREE.CircleGeometry(1.05, 36, 0, Math.PI).rotateY(-Math.PI / 2), iron), 1.12, F + 0.7, 0);
+  add(new THREE.Mesh(new THREE.TorusGeometry(1.05, 0.035, 8, 40, Math.PI).rotateY(-Math.PI / 2), brass), 1.1, F + 0.7, 0);
+  add(box(0.12, 0.7, 2.1, iron), 1.14, F + 0.35, 0);
+
+  // топка: дверца с огнём, который мерцает
+  add(box(0.08, 0.62, 0.86, std("#1a1b1f", { metalness: 0.7 })), 1.06, F + 0.55, 0);
+  const fireMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.6, 1.3, 0.25) });
+  const fire = add(new THREE.Mesh(new THREE.PlaneGeometry(0.66, 0.4).rotateY(-Math.PI / 2), fireMat), 1.01, F + 0.53, 0);
+  for (const dz of [-0.2, 0, 0.2]) add(box(0.03, 0.42, 0.05, std("#111", { metalness: 0.8 })), 1.0, F + 0.53, dz);
+  add(box(0.06, 0.06, 0.3, brass), 0.97, F + 0.82, 0);
+  // отблеск огня на полу
+  const glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 0.6, 0.15), transparent: true, opacity: 0.45, depthWrite: false, blending: THREE.AdditiveBlending });
+  const floorGlow = add(new THREE.Mesh(new THREE.CircleGeometry(0.75, 24).rotateX(-Math.PI / 2), glowMat), 0.45, F + 0.035, 0);
+
+  // манометры: латунный обод, белый циферблат, стрелка дрожит
+  const needles: { m: THREE.Mesh; base: number; ph: number }[] = [];
+  const dial = canvasTex(128, 128, (c) => {
+    c.fillStyle = "#f6f1e1";
+    c.beginPath();
+    c.arc(64, 64, 62, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = "#1a1a1a";
+    c.lineWidth = 4;
+    for (let i = 0; i <= 10; i++) {
+      const a = Math.PI * 0.75 + (i / 10) * Math.PI * 1.5;
+      c.beginPath();
+      c.moveTo(64 + Math.cos(a) * 46, 64 + Math.sin(a) * 46);
+      c.lineTo(64 + Math.cos(a) * 56, 64 + Math.sin(a) * 56);
+      c.stroke();
+    }
+    c.strokeStyle = "#e5484d";
+    c.lineWidth = 8;
+    c.beginPath();
+    c.arc(64, 64, 51, Math.PI * 0.05, Math.PI * 0.25);
+    c.stroke();
+  });
+  for (const [z, r] of [[-0.42, 0.2], [0.42, 0.2], [0, 0.14]] as const) {
+    const y = z === 0 ? F + 1.55 : F + 1.3;
+    add(new THREE.Mesh(new THREE.CylinderGeometry(r + 0.03, r + 0.03, 0.06, 24).rotateZ(Math.PI / 2), brass), 1.02, y, z);
+    add(new THREE.Mesh(new THREE.CircleGeometry(r, 24).rotateY(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: dial, color: new THREE.Color(1.15, 1.12, 1.05) })), 0.985, y, z);
+    const nd = new THREE.Mesh(new THREE.BoxGeometry(0.01, r * 0.8, 0.02).translate(0, r * 0.4, 0), new THREE.MeshBasicMaterial({ color: "#111" }));
+    nd.rotation.y = Math.PI / 2;
+    const holder = add(new THREE.Group(), 0.975, y, z);
+    holder.add(nd);
+    needles.push({ m: nd, base: -0.6 + Math.random() * 0.8, ph: Math.random() * 6 });
   }
-  const fire = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.7), new THREE.MeshBasicMaterial({ color: new THREE.Color(3.5, 1.4, 0.3) }));
-  fire.position.set(1.22, 2.0, 0);
-  g.add(fire);
-  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), std("#7a2430"));
-  seat.position.set(0.2, 1.8, 0.7);
-  g.add(seat);
-  return g;
+  // водомерное стекло
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.55, 10), new THREE.MeshStandardMaterial({ color: "#cfe8ff", transparent: true, opacity: 0.45, roughness: 0.05 })), 0.99, F + 0.95, -0.8);
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.3, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 1.2, 2.2) })), 0.99, F + 0.84, -0.8);
+  for (const dy of [-0.3, 0.3]) add(box(0.1, 0.06, 0.12, brass), 0.99, F + 0.95 + dy, -0.8);
+
+  // медные трубки по котлу
+  for (const [z, h] of [[-0.68, 1.1], [0.68, 1.1], [0.25, 0.7]] as const) add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, h, 8), copper), 1.0, F + 0.4 + h / 2, z);
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.4, 8).rotateX(Math.PI / 2), copper), 1.0, F + 1.5, 0);
+
+  // регулятор: длинный латунный рычаг сверху
+  const regulator = add(new THREE.Group(), 0.98, F + 1.85, 0.15);
+  regulator.add(box(0.05, 0.05, 0.9, brass, 0, 0, 0.42));
+  regulator.add(box(0.07, 0.18, 0.07, red, 0, -0.08, 0.86));
+  regulator.rotation.x = -0.35;
+
+  // колесо реверса слева и кран тормоза справа
+  const rev = add(new THREE.Group(), 0.55, F + 1.0, -1.08);
+  rev.add(new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.025, 8, 28), red));
+  for (let i = 0; i < 3; i++) {
+    const sp = box(0.44, 0.025, 0.025, red);
+    sp.rotation.z = (i * Math.PI) / 3;
+    rev.add(sp);
+  }
+  add(box(0.12, 1.0, 0.12, iron), 0.55, F + 0.5, -1.12);
+  add(box(0.18, 0.3, 0.18, iron), 0.75, F + 0.9, 1.05);
+  const brake = add(box(0.35, 0.04, 0.05, red), 0.62, F + 1.07, 1.05);
+  brake.rotation.y = 0.5;
+
+  // красная кнопка «ДЕПЛОЙ» под стеклянным колпаком и табличка
+  add(box(0.42, 0.5, 0.3, iron), 0.1, F + 0.25, -0.98);
+  const btnMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 0.35, 0.3) });
+  const btn = add(new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.1, 0.06, 20), btnMat), 0.1, F + 0.53, -0.98);
+  add(new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: "#dff2ff", transparent: true, opacity: 0.3, roughness: 0.05 })), 0.1, F + 0.5, -0.98);
+  const sign = canvasTex(256, 96, (c) => {
+    c.fillStyle = "#ffb919";
+    c.fillRect(0, 0, 256, 96);
+    c.fillStyle = "#1a1a1a";
+    c.fillRect(0, 0, 256, 10);
+    c.fillRect(0, 86, 256, 10);
+    c.textAlign = "center";
+    c.font = "800 34px 'Golos Text', system-ui, sans-serif";
+    c.fillText("ДЕПЛОЙ", 128, 46);
+    c.font = "700 20px 'Golos Text', system-ui, sans-serif";
+    c.fillText("не трогать до 00:00", 128, 76);
+  });
+  const signMesh = add(new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.16), new THREE.MeshBasicMaterial({ map: sign, color: new THREE.Color(1.1, 1.1, 1.1) })), 0.1, F + 0.505, -0.72);
+  signMesh.rotation.x = -Math.PI / 2;
+
+  // часы на стене будки: 23:59
+  const clock = canvasTex(160, 160, (c) => {
+    c.fillStyle = "#f6f1e1";
+    c.beginPath();
+    c.arc(80, 80, 76, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = "#c9a24a";
+    c.lineWidth = 8;
+    c.stroke();
+    c.fillStyle = "#1a1a1a";
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      c.fillRect(80 + Math.sin(a) * 58 - 3, 80 - Math.cos(a) * 58 - 3, 6, 6);
+    }
+    c.strokeStyle = "#1a1a1a";
+    c.lineCap = "round";
+    c.lineWidth = 7;
+    c.beginPath();
+    c.moveTo(80, 80);
+    c.lineTo(80 - 6, 80 - 40); // часовая почти на 12
+    c.stroke();
+    c.lineWidth = 4;
+    c.beginPath();
+    c.moveTo(80, 80);
+    c.lineTo(80 - 6, 80 - 60); // минутная на 59
+    c.stroke();
+    c.font = "800 22px 'Golos Text', system-ui, sans-serif";
+    c.textAlign = "center";
+    c.fillStyle = "#e5484d";
+    c.fillText("23:59", 80, 122);
+  });
+  const clockMesh = add(new THREE.Mesh(new THREE.CircleGeometry(0.2, 28), new THREE.MeshBasicMaterial({ map: clock, color: new THREE.Color(1.1, 1.1, 1.1) })), -0.2, F + 1.75, -1.19);
+
+  // сиденья машиниста и помощника
+  for (const z of [-0.9, 0.9]) {
+    add(box(0.55, 0.06, 0.42, wood), -0.55, F + 0.62, z);
+    add(box(0.5, 0.1, 0.38, cushion), -0.55, F + 0.7, z);
+    add(box(0.08, 0.62, 0.08, iron), -0.55, F + 0.31, z);
+  }
+  // полочка с чаем в подстаканнике и мандаринами
+  add(box(0.5, 0.04, 0.22, wood), -1.0, F + 1.15, -1.12);
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.065, 0.13, 12), brass), -1.1, F + 1.24, -1.12);
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.062, 0.062, 0.1, 12), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 0.7, 0.18) })), -1.1, F + 1.31, -1.12);
+  const orange = std("#ff8a1c", { roughness: 0.6, emissive: "#ff6a00", emissiveIntensity: 0.25 });
+  for (const dz of [-0.06, 0.06]) add(new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), orange), -0.87, F + 1.24, -1.12 + dz);
+
+  // уголь у выхода к тендеру и лопата
+  const coal = std("#17181b", { roughness: 1, flatShading: true });
+  for (let i = 0; i < 9; i++) {
+    const lump = add(new THREE.Mesh(new THREE.DodecahedronGeometry(0.09 + (i % 3) * 0.03, 0), coal), -1.0 + (i % 3) * 0.14, F + 0.08 + Math.floor(i / 3) * 0.06, -0.25 + (i % 4) * 0.14);
+    lump.rotation.set(i, i * 2, 0);
+  }
+  const shovel = add(new THREE.Group(), -0.75, F + 0.45, 0.35);
+  shovel.add(box(0.04, 0.8, 0.04, wood, 0, 0.2, 0));
+  shovel.add(box(0.28, 0.24, 0.03, iron, 0, -0.25, 0));
+  shovel.rotation.z = 0.5;
+
+  // фонарь под крышей и гирлянда по краю будки
+  const lampMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(3, 2.1, 1) });
+  add(new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8), lampMat), -0.3, F + 2.55, 0);
+  add(box(0.02, 0.3, 0.02, iron), -0.3, F + 2.75, 0);
+  const cols = [new THREE.Color(3, 0.5, 0.4), new THREE.Color(3, 2.4, 0.6), new THREE.Color(0.6, 2.6, 0.9), new THREE.Color(0.9, 1.6, 3.2)];
+  const bulbs: THREE.MeshBasicMaterial[] = [];
+  for (const z of [-1.2, 1.2])
+    for (let i = 0; i < 9; i++) {
+      const m = new THREE.MeshBasicMaterial({ color: cols[i % 4].clone() });
+      bulbs.push(m);
+      add(new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 4), m), -1.1 + i * 0.27, F + 2.75 - Math.sin(((i % 3) / 3) * Math.PI) * 0.08, z);
+    }
+  // табличка-номер на задней стенке
+  const plaque = canvasTex(256, 80, (c) => {
+    c.fillStyle = "#2b6b4d";
+    c.fillRect(0, 0, 256, 80);
+    c.strokeStyle = "#c9a24a";
+    c.lineWidth = 6;
+    c.strokeRect(4, 4, 248, 72);
+    c.fillStyle = "#f2e2b0";
+    c.font = "800 36px 'Golos Text', system-ui, sans-serif";
+    c.textAlign = "center";
+    c.fillText("РЕЛИЗ-2027", 128, 52);
+  });
+  add(new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.19).rotateY(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: plaque, color: new THREE.Color(1.1, 1.1, 1.1) })), 0.99, F + 2.05, 0);
+  void clockMesh;
+
+  return {
+    g,
+    update(t: number) {
+      // огонь дышит, стрелки дрожат, кнопка подмигивает, гирлянда мерцает
+      const k = 0.75 + 0.25 * Math.sin(t * 13) * Math.sin(t * 7.3 + 1) + 0.1 * Math.sin(t * 31);
+      fireMat.color.setRGB(3.6 * k, 1.3 * k, 0.25 * k);
+      glowMat.opacity = 0.3 + 0.2 * k;
+      fire.scale.y = 0.9 + 0.1 * k;
+      floorGlow.scale.setScalar(0.92 + 0.12 * k);
+      for (const n of needles) n.m.parent!.rotation.x = n.base + Math.sin(t * 3 + n.ph) * 0.06 + Math.sin(t * 17 + n.ph) * 0.02;
+      btnMat.color.setRGB(2.6 * (0.7 + 0.3 * Math.sin(t * 4)), 0.35, 0.3);
+      btn.scale.y = 1 + 0.15 * Math.max(0, Math.sin(t * 4));
+      bulbs.forEach((m, i) => {
+        const v = 0.45 + 0.55 * Math.max(0, Math.sin(t * 3 + i * 1.7));
+        m.color.copy(cols[i % 4]).multiplyScalar(v);
+      });
+    },
+  };
 }
